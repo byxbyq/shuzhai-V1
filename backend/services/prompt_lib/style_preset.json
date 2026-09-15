@@ -1,0 +1,8 @@
+{
+  "_meta": {
+    "description": "SB-1 prompt_lib - 风格预设外部化（style_preset）；visuals 覆盖内置视觉风格，genres 覆盖/扩展四大赛道预设",
+    "usage": "visuals: {预设名: 风格描述}；genres: {赛道名: {style_note, camera_words, light_words, palette_hint, negative_words}}"
+  },
+  "visuals": {},
+  "genres": {}
+}

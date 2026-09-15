@@ -1,0 +1,247 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Agent 调度配置 — 新增 Agent 只需在此添加条目 + 新建 Agent 类文件，无需修改 dispatcher/prompts/registry。"
+  },
+
+  "constants": {
+    "genre_list": [
+      "仙侠", "都市", "玄幻", "科幻", "悬疑", "言情", "历史", "军事", "游戏",
+      "末世", "重生", "穿越", "武侠", "灵异", "同人", "轻小说", "古言", "职场",
+      "电竞", "无限流", "系统流", "快穿", "甜宠", "星际"
+    ],
+    "template_keyword_map": {
+      "退婚": "rebirth_revenge", "重生": "rebirth_revenge", "复仇": "rebirth_revenge",
+      "系统": "urban_system", "都市": "urban_system",
+      "玄幻": "xuanhuan", "升级": "xuanhuan",
+      "宫斗": "palace_intrigue", "女频": "palace_intrigue",
+      "无限": "infinite_flow",
+      "种田": "farming"
+    },
+    "analyze_type_map": {
+      "rhythm": "节奏分析（快慢、张弛、信息密度）",
+      "character_arc": "人物弧光",
+      "logic": "逻辑漏洞检查",
+      "quality": "质量评估",
+      "structure": "结构分析（起承转合）"
+    },
+    "world_endpoint_map": {
+      "add_world_force": "/api/world/force/add",
+      "add_world_location": "/api/world/location/add",
+      "add_world_item": "/api/world/item/add"
+    },
+    "world_label_map": {
+      "add_world_force": "势力",
+      "add_world_location": "地点",
+      "add_world_item": "物品"
+    },
+    "find_replace_patterns": [
+      "(?:把|将|让)\\s*[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*(?:替换|改|换|变)\\s*(?:为|成|到)\\s*[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*$",
+      "[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*(?:替换|改|换|变)\\s*(?:为|成|到)\\s*[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*$",
+      "[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*\u2192\\s*[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*$",
+      "[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*->\\s*[\"\u201c\u201d\u2018\u2019]?(.+?)[\"\u201c\u201d\u2018\u2019]?\\s*$"
+    ]
+  },
+
+  "agents": [
+    {
+      "id": "outline",
+      "name": "大纲Agent",
+      "class_path": "backend.agents.example_agents.OutlineAgent",
+      "description": "处理大纲生成相关意图",
+      "intents": [
+        {"intent": "generate_outline", "description": "生成大纲", "examples": ["生成第3章大纲"], "params": {"chapter_index": "数字或null"}},
+        {"intent": "generate_all_outlines", "description": "生成全部章节大纲", "examples": ["生成全部章节大纲", "一键生成各章大纲"], "params": {}}
+      ]
+    },
+    {
+      "id": "chapter",
+      "name": "章节Agent",
+      "class_path": "backend.agents.example_agents.ChapterAgent",
+      "description": "处理章节生成/续写/优化相关意图",
+      "intents": [
+        {"intent": "generate_chapter", "description": "生成章节正文", "examples": ["生成第5章"], "params": {"chapter_index": "数字或null", "message": "给AI的附加指令或null"}},
+        {"intent": "continue_writing", "description": "续写", "examples": ["续写500字", "继续写下去"], "params": {"chapter_index": "数字或null", "message": "给AI的附加指令或null"}},
+        {"intent": "optimize_text", "description": "优化润色", "examples": ["润色这段文字", "优化第2章"], "params": {"chapter_index": "数字或null", "message": "给AI的附加指令或null"}},
+        {"intent": "generate_all_chapters", "description": "生成全部章节正文", "examples": ["全部生成", "生成全部正文", "一键生成所有章节"], "params": {}}
+      ]
+    },
+    {
+      "id": "validate",
+      "name": "校验Agent",
+      "class_path": "backend.agents.example_agents.ValidateAgent",
+      "description": "处理校验/检查相关意图",
+      "intents": [
+        {"intent": "check_continuity", "description": "检查连贯性（章节衔接）", "examples": ["检查第一章连贯性"], "params": {"chapter_index": "数字或null（第1章=0）", "check_type": "continuity"}},
+        {"intent": "check_completeness", "description": "检查完整性（单章质量）", "examples": ["检查第2章完整性"], "params": {"chapter_index": "数字或null", "check_type": "completeness"}},
+        {"intent": "check_drift", "description": "检查剧情偏差", "examples": ["检查剧情是否偏离大纲"], "params": {"chapter_index": "数字或null", "check_type": "drift"}},
+        {"intent": "check_style", "description": "检查风格一致性", "examples": ["检查风格是否一致"], "params": {"chapter_index": "数字或null", "check_type": "style"}},
+        {"intent": "check_all", "description": "全面检查（所有维度）", "examples": ["全面检查第1章"], "params": {"chapter_index": "数字或null", "check_type": "all"}},
+        {"intent": "check_batch", "description": "批量检查多章", "examples": ["批量检查所有章节"], "params": {}}
+      ]
+    },
+    {
+      "id": "world",
+      "name": "世界观Agent",
+      "class_path": "backend.agents.example_agents.WorldAgent",
+      "description": "处理世界观设定相关意图",
+      "intents": [
+        {"intent": "get_world", "description": "查看世界观设定", "examples": ["查看世界观"], "params": {}},
+        {"intent": "add_world_force", "description": "添加势力", "examples": ["添加势力青云门"], "params": {"force_name": "势力名或null", "description": "描述文本或null"}},
+        {"intent": "add_world_location", "description": "添加地点", "examples": ["添加地点幽冥谷"], "params": {"location_name": "地点名或null", "description": "描述文本或null"}},
+        {"intent": "add_world_item", "description": "添加物品", "examples": ["添加物品玄铁剑"], "params": {"item_name": "物品名或null", "description": "描述文本或null"}},
+        {"intent": "add_setting", "description": "添加世界观设定（用户说\"添加设定：xxx\"时使用）", "examples": ["添加设定：炁是造化、是灵机"], "params": {"setting_text": "设定内容文本或null"}},
+        {"intent": "delete_world_entity", "description": "删除世界观元素（\"删除势力青云门\"\"删掉地点幽冥谷\"\"删除物品玄铁剑\"）", "examples": ["删除势力青云门", "删掉地点幽冥谷"], "params": {"entity_type": "force/location/item或null", "entity_name": "元素名称或null"}}
+      ]
+    },
+    {
+      "id": "character",
+      "name": "人物Agent",
+      "class_path": "backend.agents.example_agents.CharacterAgent",
+      "description": "处理人物设定相关意图",
+      "intents": [
+        {"intent": "list_characters", "description": "列出角色", "examples": ["列出所有角色"], "params": {}},
+        {"intent": "add_character", "description": "添加角色（\"添加角色：林墨，28岁，程序员\"）", "examples": ["添加角色：林墨，28岁，程序员"], "params": {"character": "角色名或null", "description": "描述文本或null"}},
+        {"intent": "get_character_state", "description": "查看角色状态", "examples": ["查看陆远当前状态"], "params": {"character": "角色名或null"}},
+        {"intent": "update_character", "description": "更新角色状态", "examples": ["更新陆远的状态为重伤"], "params": {"character": "角色名或null", "description": "描述文本或null"}},
+        {"intent": "generate_characters", "description": "生成人物档案（\"生成人物档案\"\"生成角色档案\"\"创建人物\"）", "examples": ["生成人物档案", "生成角色"], "params": {}},
+        {"intent": "character_chat", "description": "角色对话", "examples": ["让陆远说句话"], "params": {"character": "角色名或null", "message": "给角色的消息或null"}},
+        {"intent": "delete_character", "description": "删除人物（\"删除人物林墨\"\"把张三这个角色删掉\"）", "examples": ["删除人物林墨", "把张三这个角色删掉"], "params": {"character": "角色名或null"}},
+        {"intent": "edit_character", "description": "修改人物档案字段（\"把林墨的性格改成冷淡寡言\"）", "examples": ["把林墨的性格改成冷淡寡言", "修改王五的身份为将军"], "params": {"character": "角色名或null", "field": "identity/faction/personality/background/obsession/weakness/goal或null", "value": "新值或null"}}
+      ]
+    },
+    {
+      "id": "project",
+      "name": "项目Agent",
+      "class_path": "backend.agents.project_agent.ProjectAgent",
+      "description": "处理项目管理相关意图",
+      "intents": [
+        {"intent": "create_project", "description": "新建小说项目（需要title和genre）", "examples": ["新建一本仙侠小说叫《问道苍穹》", "创建一个都市题材的项目"], "params": {"title": "小说标题或null", "genre": "题材类型或null"}},
+        {"intent": "get_stats", "description": "查看写作统计", "examples": ["这周写了多少字"], "params": {}},
+        {"intent": "get_templates", "description": "获取大纲模板", "examples": ["有哪些大纲模板"], "params": {}},
+        {"intent": "apply_template", "description": "应用大纲模板", "examples": ["用退婚流模板"], "params": {"template_id": "模板id或null"}}
+      ]
+    },
+    {
+      "id": "chapter_manage",
+      "name": "章节管理Agent",
+      "class_path": "backend.agents.chapter_manage_agent.ChapterManageAgent",
+      "description": "处理章节管理相关意图",
+      "intents": [
+        {"intent": "list_chapters", "description": "列出章节", "examples": ["列出所有章节"], "params": {}},
+        {"intent": "load_chapter", "description": "加载章节内容", "examples": ["加载第3章"], "params": {"chapter_index": "数字或null"}},
+        {"intent": "save_chapter", "description": "保存章节", "examples": ["保存当前章节"], "params": {"chapter_index": "数字或null"}},
+        {"intent": "add_chapter", "description": "新建章节（\"新建第6章\"\"添加一章\"）", "examples": ["新建第6章", "添加一章"], "params": {"chapter_index": "数字或null（0-based）"}},
+        {"intent": "delete_chapter", "description": "删除章节（\"删除第5章\"）", "examples": ["删除第5章"], "params": {"chapter_index": "数字或null（0-based）"}},
+        {"intent": "reorder_chapter", "description": "调整章节顺序（\"把第2章移到第4章后面\"）", "examples": ["把第2章移到第4章后面", "调整章节顺序"], "params": {"chapter_index": "数字或null", "target_index": "目标位置或null"}},
+        {"intent": "rename_chapter", "description": "重命名章节（\"把第3章改名为风起\"）", "examples": ["把第3章改名为风起云涌", "第2章标题改成xxx"], "params": {"chapter_index": "数字或null", "title": "新标题或null"}}
+      ]
+    },
+    {
+      "id": "memory",
+      "name": "记忆Agent",
+      "class_path": "backend.agents.memory_agent.MemoryAgent",
+      "description": "处理记忆/伏笔/时间线相关意图",
+      "intents": [
+        {"intent": "get_memory", "description": "查看记忆/伏笔/时间线", "examples": ["查看伏笔"], "params": {}},
+        {"intent": "memory_search", "description": "搜索记忆", "examples": ["搜索玉佩相关的记忆"], "params": {"search_query": "搜索关键词或null"}},
+        {"intent": "get_timeline", "description": "查看时间线事件", "examples": ["查看时间线"], "params": {}},
+        {"intent": "recover_hook", "description": "回收伏笔", "examples": ["回收玉佩伏笔"], "params": {"hook_id": "伏笔id或null", "hook_content": "伏笔内容或null"}},
+        {"intent": "add_hook", "description": "添加伏笔", "examples": ["添加伏笔：玉佩来历不明"], "params": {"hook_content": "伏笔内容或null"}},
+        {"intent": "abandon_hook", "description": "废弃伏笔（\"废弃伏笔xxx\"\"那个玉佩的伏笔不要了\"）", "examples": ["废弃伏笔玉佩", "那个玉佩的伏笔不要了"], "params": {"hook_content": "伏笔内容关键词或null", "reason": "废弃原因或null"}}
+      ]
+    },
+    {
+      "id": "storyboard",
+      "name": "分镜Agent",
+      "class_path": "backend.agents.storyboard_agent.StoryboardAgent",
+      "description": "处理分镜生成相关意图",
+      "intents": [
+        {"intent": "storyboard", "description": "生成视频分镜脚本（\"生成分镜\"\"给第3章做分镜\"\"生成视频分镜\"），需要先确认目标章节有足够正文（至少50字）", "examples": ["生成第3章的分镜", "给当前章做视频分镜", "为第5章生成分镜脚本"], "params": {"chapter_index": "数字或null", "target_tool": "kling/sora/jimeng/通用或null", "style_preset": "写实电影/动漫/水墨/赛博朋克/默认或null", "shot_density": "sparse/medium/dense或null", "platform": "douyin/kuaishou或null", "genre_preset": "古风甜宠/高燃打斗/现代逆袭/悬疑重生或null"}}
+      ]
+    },
+    {
+      "id": "export",
+      "name": "导出Agent",
+      "class_path": "backend.agents.export_agent.ExportAgent",
+      "description": "处理导出/卷管理/版本对比相关意图",
+      "intents": [
+        {"intent": "export_book", "description": "导出书籍（txt/epub/pdf）", "examples": ["导出epub"], "params": {"format": "txt/epub/pdf或null"}},
+        {"intent": "snapshot_diff", "description": "版本对比", "examples": ["对比版本"], "params": {}},
+        {"intent": "get_volumes", "description": "查看卷列表", "examples": ["查看卷列表"], "params": {}},
+        {"intent": "add_volume", "description": "新增卷（title为新卷名，description为卷简介可空）", "examples": ["新增一卷叫龙起卷", "加一卷"], "params": {"title": "新卷名或null", "description": "卷简介或null"}},
+        {"intent": "delete_volume", "description": "删除卷（\"删除第2卷\"\"删掉龙起卷\"）", "examples": ["删除第2卷", "删掉龙起卷"], "params": {"vol_index": "卷序号（0开始，第1卷=0）或null"}},
+        {"intent": "rename_volume", "description": "重命名卷（\"把第2卷改名为xxx\"）", "examples": ["把第2卷改名为龙起"], "params": {"vol_index": "卷序号或null", "title": "新名称或null"}}
+      ]
+    },
+    {
+      "id": "sync",
+      "name": "同步Agent",
+      "class_path": "backend.agents.sync_agent.SyncAgent",
+      "description": "处理云同步相关意图",
+      "intents": [
+        {"intent": "sync_push", "description": "云同步上传", "examples": ["同步到云端"], "params": {}},
+        {"intent": "sync_pull", "description": "云同步下载", "examples": ["从云端同步"], "params": {}},
+        {"intent": "sync_config", "description": "云同步配置", "examples": ["配置云同步"], "params": {}}
+      ]
+    },
+    {
+      "id": "ai",
+      "name": "AI创作Agent",
+      "class_path": "backend.agents.ai_agent.AIAgent",
+      "description": "处理通用对话、头脑风暴、五感描写、分析、总结等AI调用意图",
+      "intents": [
+        {"intent": "general_chat", "description": "通用对话（不属于以上任何意图）", "examples": ["你好"], "params": {"message": "用户输入或null"}},
+        {"intent": "brainstorm", "description": "头脑风暴", "examples": ["帮我头脑风暴一个开篇"], "params": {"message": "用户输入或null", "scene": "场景描述或null"}},
+        {"intent": "sensory", "description": "五感描写生成（视觉/听觉/嗅觉/触觉/味觉）", "examples": ["给这段加视觉描写"], "params": {"sense_type": "visual/auditory/olfactory/tactile/gustatory/all或null", "scene": "场景描述或null"}},
+        {"intent": "ai_analyze", "description": "AI分析文本提取设定", "examples": ["帮我分析这段提取设定"], "params": {"text": "待分析文本或null"}},
+        {"intent": "analyze_chapter", "description": "深度分析章节（\"分析第1章的节奏\"\"这章哪里有问题\"）", "examples": ["分析第1章的节奏和结构", "分析主角陆远的人物弧光"], "params": {"chapter_index": "数字或null", "analyze_type": "rhythm/character_arc/logic/quality/structure或null", "character": "角色名或null"}},
+        {"intent": "summarize_plot", "description": "总结故事主线（\"总结一下故事主线\"\"梳理一下剧情\"）", "examples": ["总结一下故事主线", "梳理一下剧情"], "params": {}}
+      ]
+    },
+    {
+      "id": "edit",
+      "name": "编辑Agent",
+      "class_path": "backend.agents.edit_agent.EditAgent",
+      "description": "处理查找替换相关意图",
+      "intents": [
+        {"intent": "find_replace", "description": "全文查找替换（\"把陆远替换为路远\"\"全文替换xxx为yyy\"）", "examples": ["把陆远替换为路远", "全文替换xxx为yyy"], "params": {"find_text": "要查找的文本或null", "replace_text": "要替换为的文本或null"}}
+      ]
+    },
+    {
+      "id": "wizard",
+      "name": "创作向导Agent",
+      "class_path": "backend.agents.wizard_agent.WizardAgent",
+      "description": "处理创作向导相关意图",
+      "intents": [
+        {"intent": "wizard", "description": "创作向导对话（用户正在走新手创作向导流程，回答题材/主角/剧情等问题。追加模式时stage应为append_outline，常见触发：\"延长故事\"\"继续扩展\"\"追加新阶段\"\"故事还没写完\"\"加一个大结局\"\"再来一卷\"\"继续发展剧情\"\"追加\"\"扩展大纲\"）", "examples": ["仙侠（在创作向导中回答题材）"], "params": {"stage": "wizard阶段名或null", "message": "用户输入或null"}}
+      ]
+    },
+    {
+      "id": "search",
+      "name": "搜索Agent",
+      "class_path": "backend.agents.search_agent.SearchAgent",
+      "description": "处理联网搜索相关意图",
+      "intents": [
+        {"intent": "search", "description": "联网搜索（用户要求搜索、查资料、核实信息时使用，params.query为搜索关键词）", "examples": ["搜索唐朝官制", "查一下黑洞的成因"], "params": {"query": "搜索关键词或null"}}
+      ]
+    },
+    {
+      "id": "navigate",
+      "name": "导航Agent",
+      "class_path": "backend.agents.navigate_agent.NavigateAgent",
+      "description": "处理页面导航相关意图",
+      "intents": [
+        {"intent": "open_page", "description": "打开页面/导航跳转（\"打开时间线\"\"去写作页\"\"跳到伏笔管理\"。params.page从以下列表选：世界观/人物/全书大纲/分卷/章节大纲/连线框/写作/时间线/草稿定稿/伏笔管理/头脑风暴/五感描写/写作统计/版本对比/云同步/导出/导入/大纲模板/批量检查/角色对话/技能包/AI编辑器/排行榜/描写/扩写/改写/反馈/AI分析/快捷模式/提炼/审计日志/创作向导/拆书/分镜/书架）", "examples": ["打开伏笔管理", "去写作页面", "跳到第3步"], "params": {"page": "页面名或null"}}
+      ]
+    }
+  ],
+
+  "standalone_intents": {
+    "edit_selection": {
+      "description": "选段修复（用户选中了编辑器中的文字，要求修改/润色/扩写/删除等。当selected_text非空且用户有修改意图时使用）",
+      "handler": "execute_edit_selection",
+      "examples": ["（选中文字后）把这段描写加细节", "（选中文字后）这里的逻辑有问题，改成林浅先发现异常"]
+    }
+  }
+}

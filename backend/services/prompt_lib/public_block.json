@@ -1,0 +1,7 @@
+{
+  "_meta": {
+    "description": "SB-1 prompt_lib - 公共块文本外部化；同名字段覆盖 storyboard_prompts.py 内置文本",
+    "overridable_keys": ["state_continuity"]
+  },
+  "state_continuity": ""
+}

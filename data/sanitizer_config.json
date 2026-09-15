@@ -1,0 +1,9 @@
+{
+  "_说明": "Prompt注入防护配置。用户可手动增删危险词。修改后需重启后端或调用 POST /api/sanitizer/reload 热重载。",
+  "extra_patterns": [
+    "在此添加自定义正则，如特定攻击变体。例如：(?i)override\\s+system"
+  ],
+  "disabled_patterns": [
+    "在此填写要禁用的默认正则（完整字符串），如 'DAN\\\\s*模式'。注意：禁用后该规则不再生效"
+  ]
+}

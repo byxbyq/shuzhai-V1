@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>书斋 - 服务器配置</title>
+<style>
+:root{--bg:#1a1815;--surface:#24211d;--accent:#c75b39;--ink:#e8e0d5;--muted:#8b7355;--border:rgba(255,255,255,0.08)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:380px;width:100%}
+h1{font-size:22px;color:var(--accent);text-align:center;margin-bottom:4px}
+.subtitle{text-align:center;color:var(--muted);font-size:13px;margin-bottom:24px}
+.form-group{margin-bottom:16px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--ink);border-radius:6px;padding:12px 14px;font-size:14px;outline:none}
+input:focus{border-color:var(--accent)}
+.btn{width:100%;padding:12px;border-radius:6px;border:none;cursor:pointer;font-size:14px;font-weight:600;background:var(--accent);color:#fff;margin-top:8px}
+.btn:active{opacity:0.8}
+.hint{font-size:11px;color:var(--muted);margin-top:16px;text-align:center;line-height:1.6}
+.preset{display:flex;gap:8px;margin-top:8px}
+.preset-btn{flex:1;padding:8px;border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:4px;font-size:11px;cursor:pointer}
+.preset-btn:active{border-color:var(--accent);color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>📚 书斋</h1>
+<p class="subtitle">AI小说创作工具</p>
+
+<div class="form-group">
+<label>服务器地址</label>
+<input type="text" id="server-url" placeholder="http://服务器IP:8888" value="">
+<div class="preset">
+<button class="preset-btn" onclick="setPreset('http://127.0.0.1:8888')">本机测试</button>
+<button class="preset-btn" onclick="setPreset('http://192.168.1.100:8888')">局域网</button>
+<button class="preset-btn" onclick="setPreset('https://')">云端</button>
+</div>
+</div>
+
+<button class="btn" onclick="saveAndGo()">连接服务器</button>
+<button class="btn btn-offline" onclick="enableOffline()" style="margin-top:8px;background:transparent;border:1px solid var(--accent);color:var(--accent)">启用离线模式（无需服务器）</button>
+
+<div class="hint">
+输入书斋服务器的地址<br>
+或启用离线模式，直接在手机上使用AI Key创作<br>
+服务器由书斋.exe启动
+</div>
+</div>
+
+<script>
+function setPreset(url) {
+  document.getElementById('server-url').value = url;
+  if (url === 'https://') {
+    document.getElementById('server-url').focus();
+  }
+}
+
+function saveAndGo() {
+  var url = document.getElementById('server-url').value.trim();
+  if (!url) { alert('请输入服务器地址'); return; }
+  url = url.replace(/\/+$/, '');
+  localStorage.setItem('shuzhai_server', url);
+  window.location.href = url + '/login.html';
+}
+
+function enableOffline() {
+  localStorage.setItem('shuzhai_offline_enabled', '1');
+  localStorage.removeItem('shuzhai_server');
+  window.location.href = 'index.html';
+}
+
+// 已配置过则自动跳转
+var saved = localStorage.getItem('shuzhai_server');
+if (saved) {
+  document.getElementById('server-url').value = saved;
+}
+</script>
+</body>
+</html>

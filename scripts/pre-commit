@@ -1,0 +1,57 @@
+#!/bin/sh
+# 书斋 V66 pre-commit 钩子：提交前运行契约测试套件（pytest -x -q）
+# 安装：把本文件复制到 .git/hooks/pre-commit（仓库内副本，重克隆后可重装）
+#   cp scripts/pre-commit .git/hooks/pre-commit
+
+# ===== 定位真实 Python（跳过 Microsoft Store 假壳），逻辑与 start.bat 对齐 =====
+PYTHON=""
+for d in /h/Marvis/MarvisAgent/*/runtime/python311/python.exe; do
+    if [ -x "$d" ]; then PYTHON="$d"; break; fi
+done
+if [ -z "$PYTHON" ]; then
+    for p in python3.11 python3 python; do
+        if "$p" -c "import sys; sys.exit(0 if 'WindowsApps' not in sys.executable else 1)" >/dev/null 2>&1; then
+            PYTHON="$p"
+            break
+        fi
+    done
+fi
+if [ -z "$PYTHON" ]; then
+    echo "[pre-commit] 未找到真实 Python 解释器，跳过测试" >&2
+    exit 0
+fi
+
+echo "[pre-commit] 运行契约测试: $PYTHON -m pytest tests -x -q"
+"$PYTHON" -m pytest tests -x -q
+status=$?
+if [ $status -ne 0 ]; then
+    echo "[pre-commit] 测试未通过，提交被拦截；确需跳过请用 git commit --no-verify" >&2
+    exit $status
+fi
+
+# ===== ruff 检查（ruff 可用时；规则：致命语法错误 + 未定义名/重复定义/未用导入） =====
+# F401 排除 __init__.py（包的再导出）；门面模块用 __all__ 声明再导出
+if "$PYTHON" -m ruff --version >/dev/null 2>&1; then
+    echo "[pre-commit] ruff 检查: E9,F63,F7,F401,F811,F821"
+    if ! "$PYTHON" -m ruff check server.py backend tests sync_apk_backend.py --select E9,F63,F7,F401,F811,F821 --exclude "__init__.py"; then
+        echo "[pre-commit] ruff 发现问题，提交被拦截" >&2
+        exit 1
+    fi
+fi
+
+# ===== 前端 bundle 漂移检查（node 可用时） =====
+NODE=""
+if command -v node >/dev/null 2>&1; then
+    NODE="node"
+elif [ -x "/c/Program Files/nodejs/node.exe" ]; then
+    NODE="/c/Program Files/nodejs/node.exe"
+fi
+if [ -n "$NODE" ]; then
+    echo "[pre-commit] 检查 bundle.js 与源文件一致性"
+    if ! (cd frontend && "$NODE" scripts/build-bundle.js --check); then
+        echo "[pre-commit] bundle.js 漂移，提交被拦截：cd frontend && npm run build 后重试" >&2
+        exit 1
+    fi
+fi
+
+exit 0

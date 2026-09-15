@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "description": "书斋 V66 分镜 Prompt 外部化配置（SB-1 外部化版本管理）",
+    "current_version": "2.1",
+    "note": "blocks 中同名字段会覆盖 storyboard_prompts.py 内置文本；若某块缺失则使用内置文本。修改后调用 PromptVersionManager.reload() 或重启生效。"
+  },
+  "versions": {
+    "1.0": {
+      "name": "legacy 单块 f-string",
+      "description": "旧版 storyboard_service._build_prompt() 全量硬编码",
+      "features": ["280+ 行单块 prompt", "无模块化"]
+    },
+    "2.0": {
+      "name": "模块化 8 块",
+      "description": "SB-1 拆分 8 个独立模块 + SB-6 PromptConfig",
+      "features": ["模块化", "配置驱动", "角色分层/世界观过滤/Token裁剪可开关"]
+    },
+    "2.1": {
+      "name": "模块化 8 块 + 场景感知注入",
+      "description": "场景感知条件注入 + SB-1 外部化版本管理",
+      "features": ["场景感知注入", "Prompt 文本外部化", "热更新"]
+    }
+  },
+  "blocks": {
+    "system_role": "你是一位资深影视分镜师和AI视频导演。你的任务是把小说片段转化为可直接用于AI视频生成的分镜脚本。",
+    "output_req": "## 输出要求\n- 语言：{tool_lang}\n- 风格：{style_note}\n- 工具适配：{tool_tip}\n- 版本：分镜Prompt v2.1（模块化+场景感知）"
+  }
+}

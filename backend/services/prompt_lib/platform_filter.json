@@ -1,0 +1,7 @@
+{
+  "_meta": {
+    "description": "SB-1 prompt_lib - 平台过滤外部化（platform_filter）；platforms 覆盖/扩展内置 douyin/kuaishou 配置",
+    "usage": "platforms: {平台名: {description, replacements, negative_words, enhance_note}}"
+  },
+  "platforms": {}
+}

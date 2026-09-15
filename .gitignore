@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+
+# PyInstaller
+build/
+dist/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 运行时数据（用户项目数据，不纳入版本控制）
+data/users/
+data/novel_projects/
+
+# 数据滚动备份（backup_service 生成，不纳入版本控制）
+data/_backups/
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+*.bak
+
+# Node.js
+node_modules/
+apk/node_modules/
+
+# Android构建产物
+apk/android/app/build/
+apk/android/.gradle/
+apk/android/local.properties
+
+# APK备份目录
+*_backup_*
+
+# 交付/测试构建产物（大二进制，不入版本控制）
+DELIVERY/
+test_screenshots/
+
+# Trae/Workbuddy IDE 记忆文件（本地会话状态）
+.workbuddy/
+
+# 运行时配置/状态（每次启动会变更，不入版本控制）
+data/last_project.txt
+data/ai_config.json
+data/ranking/*.json
+backend/flow_engine/nodes/config_nodes.json
+backend/flow_engine/nodes/workflows.json
+backend/flow_engine/test_v2_output.txt
+
+# 临时调试/验证脚本（不纳入版本控制，单下划线前缀；不影响 __init__.py）
+_*.py
+!__init__.py
+_*.json
+_*.txt
+_*.bat
+
+# APK副本目录暂不规划，禁止触碰与同步（不纳入版本控制）
+apk/android/app/src/main/python/
+
+# IDE/评审本地产物
+.qoder/
+.scratch/
+backend/data/ai_config.json
+
+# ����ʱ��־����ʱ����
+logs/
+output/

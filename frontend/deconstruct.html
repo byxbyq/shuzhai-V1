@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拆书学习 - 书斋</title>
+<style>
+:root{--bg:#1a1815;--surface:#24211d;--paper:#f5f0e8;--ink:#e8e0d5;--muted:#8b7355;--accent:#c75b39;--border:rgba(255,255,255,0.06);--radius-sm:6px;--radius-md:10px;font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
+header{background:var(--surface);padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+header h1{font-size:16px;font-weight:600}
+header a{color:var(--muted);text-decoration:none;font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:4px}
+header a:hover{color:var(--accent);border-color:var(--accent)}
+main{flex:1;max-width:900px;width:100%;margin:0 auto;padding:24px 20px}
+h2{font-size:18px;margin-bottom:16px}
+textarea,input,select{background:var(--bg);border:1px solid var(--border);color:var(--ink);border-radius:4px;padding:10px 12px;font-size:13px;font-family:inherit;outline:none;width:100%}
+textarea{min-height:200px;resize:vertical;line-height:1.8}
+textarea:focus,input:focus,select:focus{border-color:var(--accent)}
+.row{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}
+label.cb{font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px}
+.btn{padding:8px 20px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;border:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-primary:hover{opacity:0.9}
+.btn-ghost:hover{color:var(--accent);border-color:var(--accent)}
+.progress{margin:12px 0;display:none}
+.progress-bar{height:4px;background:var(--border);border-radius:2px;margin-top:6px}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;width:0;transition:width .3s}
+.progress-stage{font-size:12px;color:var(--muted)}
+.result-section{margin:16px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.result-header{padding:10px 14px;background:var(--surface);font-weight:600;font-size:13px;cursor:pointer;display:flex;justify-content:space-between}
+.result-body{padding:14px;display:none;font-size:13px;line-height:1.7;max-height:400px;overflow-y:auto}
+.result-body.open{display:block}
+.result-body pre{white-space:pre-wrap;word-break:break-word;font-family:inherit;margin:0}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{padding:8px 16px;cursor:pointer;font-size:12px;color:var(--muted);border-bottom:2px solid transparent;transition:.15s}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.transform-box{border:1px solid var(--accent);border-radius:6px;padding:16px;margin-top:16px;background:rgba(199,91,57,0.05)}
+.transform-box h3{font-size:14px;color:var(--accent);margin-bottom:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.grid3 label{font-size:11px;color:var(--muted)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface);padding:10px 20px;border-radius:6px;font-size:13px;display:none;z-index:100;border:1px solid var(--border)}
+@media(max-width:640px){
+  main{padding:16px 12px}
+  h2{font-size:15px}
+  header{padding:10px 12px;flex-wrap:wrap}
+  header h1{font-size:14px}
+  textarea{min-height:150px;font-size:14px}
+  .row{gap:6px}
+  .btn{padding:8px 14px;font-size:12px}
+  .grid3{grid-template-columns:1fr;gap:6px}
+  .result-body{padding:10px;font-size:12px;max-height:300px}
+  .tab{padding:6px 10px;font-size:11px}
+  #file-upload-area{padding:12px;font-size:12px}
+  .toast{bottom:60px;font-size:12px;padding:8px 16px;max-width:90vw;text-align:center}
+}
+</style>
+<script src="js/theme-init.js"></script>
+</head>
+<body>
+<header>
+  <h1>📖 拆书学习</h1>
+  <span style="flex:1"></span>
+  <a href="/">← 返回书斋</a>
+</header>
+<main>
+  <h2>分析热门小说结构，转化为你的创作设定</h2>
+  <div id="file-upload-area" style="border:2px dashed var(--border);border-radius:8px;padding:16px;margin-bottom:12px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" onclick="document.getElementById('file-input').click()">
+    <input type="file" id="file-input" style="display:none" accept=".txt,.md,.docx,.xlsx,.csv,.pdf" onchange="handleFileUpload(this.files)" multiple>
+    <span style="font-size:13px;color:var(--muted)">📁 点击上传文件 或拖拽到此处（支持 txt/md/docx/xlsx/csv/pdf）</span>
+  </div>
+  <textarea id="input" placeholder="在此粘贴你要分析的小说内容（全文、章节或片段）..."></textarea>
+  <div class="row">
+    <span style="font-size:12px;color:var(--muted)">分析维度:</span>
+    <label class="cb"><input type="checkbox" class="dim-cb" value="structure" checked>结构</label>
+    <label class="cb"><input type="checkbox" class="dim-cb" value="characters" checked>角色</label>
+    <label class="cb"><input type="checkbox" class="dim-cb" value="worldbuilding" checked>世界观</label>
+    <label class="cb"><input type="checkbox" class="dim-cb" value="theme" checked>主题</label>
+    <label class="cb"><input type="checkbox" class="dim-cb" value="plot_mechanics" checked>情节</label>
+    <select id="genre" style="width:auto;margin-left:12px"><option>玄幻</option><option>都市</option><option>科幻</option><option>言情</option><option>悬疑</option><option>其他</option></select>
+  </div>
+  <div class="row" id="distill-strategy-row" style="display:none">
+    <span style="font-size:12px;color:var(--muted)">蒸馏策略:</span>
+    <label class="cb"><input type="radio" name="distill-strategy" value="decon" id="ds-decon" checked> 基于拆书数据（推荐·省token）</label>
+    <label class="cb"><input type="radio" name="distill-strategy" value="raw" id="ds-raw"> 原始文本蒸馏</label>
+    <span id="ds-hint" style="font-size:11px;color:var(--muted);margin-left:6px"></span>
+  </div>
+  <div class="row">
+    <button class="btn btn-primary" onclick="doDeconstruct()">⚡ 开始分析</button>
+    <button class="btn btn-ghost" onclick="resumeAnalysis()" id="btn-resume" style="display:none">▶ 断点续传</button>
+    <button class="btn btn-ghost" onclick="exportResult()">📥 导出结果</button>
+    <button class="btn btn-ghost" onclick="distillWritingSkills()" id="btn-distill">🔥 蒸馏写作技能</button>
+    <span style="flex:1"></span>
+    <span id="word-count" style="font-size:11px;color:var(--muted)">0字</span>
+  </div>
+  <div class="progress" id="progress">
+    <span class="progress-stage" id="prog-text"></span>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+    <div id="prog-detail" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+  </div>
+  <div id="results"></div>
+  <div class="transform-box" id="transform" style="display:none">
+    <h3>→ 转化为我的设定</h3>
+    <div class="grid3">
+      <div><label>小说类型</label><input type="text" id="my-genre" placeholder="玄幻/都市..."></div>
+      <div><label>基调</label><input type="text" id="my-tone" placeholder="热血/黑暗..."></div>
+      <div><label>核心创意</label><input type="text" id="my-idea" placeholder="一句话描述你的故事..."></div>
+    </div>
+    <button class="btn btn-primary" onclick="doTransform()">→ 转化为我的设定</button>
+    <button class="btn btn-ghost" onclick="importToProject()" id="btn-import" style="display:none">📥 导入到项目</button>
+    <div id="preview" style="margin-top:12px"></div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+<script src="js/skill-data.js?v=211"></script>
+<script src="js/skill-core.js?v=211"></script>
+<script>
+const API = window.location.origin;
+function api(path, opts={}) {
+  return fetch(API+path, {headers:{'Content-Type':'application/json'},...opts}).then(r=>r.json());
+}
+function toast(msg) {
+  var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';
+  setTimeout(function(){t.style.display='none'},2000);
+}
+
+var deconData = null;
+var dimLabels = {structure:'故事结构',characters:'角色系统',worldbuilding:'世界构建',theme:'主题动机',plot_mechanics:'情节技法'};
+
+// ===== 文件上传 =====
+async function handleFileUpload(files) {
+  if (!files || !files.length) return;
+  var formData = new FormData();
+  for (var i = 0; i < files.length; i++) {
+    formData.append('files', files[i]);
+  }
+  var area = document.getElementById('file-upload-area');
+  var origHTML = area.innerHTML;
+  area.innerHTML = '<span style="font-size:13px;color:var(--accent)">⏳ 正在解析文件...</span>';
+  
+  try {
+    var resp = await fetch(API + '/api/file/parse', { method: 'POST', body: formData });
+    var data = await resp.json();
+    if (data.ok) {
+      var text = data.combined || '';
+      var existing = document.getElementById('input').value.trim();
+      if (existing) {
+        document.getElementById('input').value = existing + '\n\n' + text;
+      } else {
+        document.getElementById('input').value = text;
+      }
+      var wc = document.getElementById('input').value.length;
+      document.getElementById('word-count').textContent = wc + '字';
+      var names = (data.results || []).map(function(r) { return r.name; }).join(', ');
+      toast('✅ 已导入 ' + (data.results || []).length + ' 个文件（' + names + '），共' + text.length + '字');
+    } else {
+      toast('❌ 解析失败：' + (data.error || '未知错误'));
+    }
+  } catch(e) {
+    toast('❌ 上传失败：' + e.message);
+  } finally {
+    area.innerHTML = origHTML;
+    document.getElementById('file-input').value = '';
+  }
+}
+
+// 拖拽支持 - 绑定到上传区域和整个页面
+function setupDragDrop() {
+  var area = document.getElementById('file-upload-area');
+  var input = document.getElementById('input');
+  
+  // 上传区域拖拽
+  if (area) {
+    area.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.borderColor = 'var(--accent)';
+      this.style.background = 'rgba(199,91,57,0.05)';
+    });
+    area.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      this.style.borderColor = 'var(--border)';
+      this.style.background = '';
+    });
+    area.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.borderColor = 'var(--border)';
+      this.style.background = '';
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleFileUpload(e.dataTransfer.files);
+      }
+    });
+  }
+  
+  // 全局拖拽（拖到页面任意位置都能上传）
+  document.addEventListener('dragover', function(e) {
+    e.preventDefault(); // 阻止浏览器默认行为
+  });
+  document.addEventListener('drop', function(e) {
+    // 如果drop在上传区域，由区域自己的handler处理
+    if (e.target && e.target.closest && e.target.closest('#file-upload-area')) return;
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      handleFileUpload(e.dataTransfer.files);
+    }
+  });
+  
+  // 阻止textarea把文件当文本插入
+  if (input) {
+    input.addEventListener('drop', function(e) {
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        e.preventDefault();
+        handleFileUpload(e.dataTransfer.files);
+      }
+    });
+    input.addEventListener('dragover', function(e) {
+      if (e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+      }
+    });
+  }
+}
+
+// 页面加载后初始化
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupDragDrop);
+} else {
+  setupDragDrop();
+}
+
+// ===== localStorage 自动保存/恢复 =====
+var SAVE_KEY = 'deconstruct_save';
+function autoSave() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      input: document.getElementById('input').value,
+      genre: document.getElementById('genre').value,
+      dims: Array.from(document.querySelectorAll('.dim-cb:checked')).map(function(c){return c.value}),
+      myGenre: document.getElementById('my-genre').value,
+      myTone: document.getElementById('my-tone').value,
+      myIdea: document.getElementById('my-idea').value,
+      deconData: deconData,
+      timestamp: Date.now()
+    }));
+  } catch(e){}
+}
+function autoRestore() {
+  try {
+    var saved = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!saved) return;
+    if (saved.input) document.getElementById('input').value = saved.input;
+    if (saved.genre) document.getElementById('genre').value = saved.genre;
+    if (saved.dims) {
+      document.querySelectorAll('.dim-cb').forEach(function(cb){
+        cb.checked = saved.dims.indexOf(cb.value) !== -1;
+      });
+    }
+    if (saved.myGenre) document.getElementById('my-genre').value = saved.myGenre;
+    if (saved.myTone) document.getElementById('my-tone').value = saved.myTone;
+    if (saved.myIdea) document.getElementById('my-idea').value = saved.myIdea;
+    if (saved.deconData) {
+      deconData = saved.deconData;
+      var dims = saved.dims || ['structure','characters','worldbuilding','theme','plot_mechanics'];
+      renderResults(deconData, dims);
+      document.getElementById('transform').style.display = 'block';
+    }
+  } catch(e){}
+  updateDistillStrategyRow();
+}
+
+// 更新蒸馏策略选择行的可见性与默认值
+function updateDistillStrategyRow() {
+  var row = document.getElementById('distill-strategy-row');
+  var deconRadio = document.getElementById('ds-decon');
+  var rawRadio = document.getElementById('ds-raw');
+  var hint = document.getElementById('ds-hint');
+  if (!row) return;
+
+  if (deconData) {
+    // 有拆书数据：显示选择器，默认decon
+    row.style.display = 'flex';
+    if (deconRadio) deconRadio.disabled = false;
+    if (deconRadio) deconRadio.checked = true;
+    if (hint) hint.textContent = '✓ 已检测到拆书分析结果';
+  } else {
+    // 无拆书数据：隐藏选择器（强制raw）
+    row.style.display = 'none';
+    if (rawRadio) rawRadio.checked = true;
+  }
+}
+// 输入时自动保存
+document.getElementById('input').addEventListener('input', autoSave);
+document.getElementById('genre').addEventListener('change', autoSave);
+document.querySelectorAll('.dim-cb').forEach(function(cb){ cb.addEventListener('change', autoSave); });
+['my-genre','my-tone','my-idea'].forEach(function(id){
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('input', autoSave);
+});
+// 页面加载时恢复
+autoRestore();
+
+function exportResult() {
+  if (!deconData) { toast('请先完成分析'); return; }
+  var text = '═══ 拆书分析结果 ═══\n';
+  text += '导出时间: ' + new Date().toLocaleString() + '\n\n';
+  for (var dim in deconData) {
+    text += '━━━ ' + (dimLabels[dim]||dim) + ' ━━━\n';
+    text += JSON.stringify(deconData[dim], null, 2) + '\n\n';
+  }
+  var blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '拆书分析_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+  toast('已导出');
+}
+
+// ===== 增量拆书进度管理 =====
+var PROG_KEY = 'deconstruct_progress';
+var analysisProgress = null;  // {step, chunkSummaries, fullSummary, dims, dimResults, sourceMeta}
+
+function saveProgress() {
+  if (analysisProgress) {
+    try { localStorage.setItem(PROG_KEY, JSON.stringify(analysisProgress)); } catch(e){}
+  }
+}
+function clearProgress() {
+  analysisProgress = null;
+  try { localStorage.removeItem(PROG_KEY); } catch(e){}
+  document.getElementById('btn-resume').style.display = 'none';
+}
+function loadProgress() {
+  try {
+    var p = JSON.parse(localStorage.getItem(PROG_KEY));
+    if (p && p.step) return p;
+  } catch(e){}
+  return null;
+}
+// 页面加载时检查是否有未完成的进度
+var savedProgress = loadProgress();
+if (savedProgress) document.getElementById('btn-resume').style.display = '';
+
+// 字数统计
+document.getElementById('input').addEventListener('input', function(){
+  document.getElementById('word-count').textContent = this.value.length + '字';
+});
+
+async function doDeconstruct() {
+  var text = document.getElementById('input').value.trim();
+  if (text.length < 100) { toast('文本太短，至少100字'); return; }
+  var dims = Array.from(document.querySelectorAll('.dim-cb:checked')).map(function(c){return c.value});
+  if (dims.length === 0) { toast('请至少选择一个维度'); return; }
+  
+  // 重置进度
+  clearProgress();
+  analysisProgress = {
+    step: 'summarize',  // summarize → merge → analyze → done
+    chunkIndex: 0,
+    chunks: chunkText(text, 8000),
+    chunkSummaries: [],
+    fullSummary: '',
+    dims: dims,
+    dimIndex: 0,
+    dimResults: {},
+    sourceMeta: null,
+    fullText: text
+  };
+  await runIncremental();
+}
+
+// 文本分块（和后端逻辑一致）
+function chunkText(content, maxChars) {
+  if (content.length <= maxChars) return [content];
+  var chunks = [];
+  var paragraphs = content.split('\n');
+  var current = '';
+  for (var i=0; i<paragraphs.length; i++) {
+    var para = paragraphs[i];
+    if (current.length + para.length + 1 <= maxChars) {
+      current = current ? current + '\n' + para : para;
+    } else {
+      if (current.trim()) chunks.push(current.trim());
+      if (para.length > maxChars) {
+        chunks.push(para.substring(0, maxChars));
+        current = para.substring(maxChars);
+      } else {
+        current = para;
+      }
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+async function runIncremental() {
+  var prog = document.getElementById('progress');
+  var pt = document.getElementById('prog-text');
+  var pf = document.getElementById('prog-fill');
+  var pd = document.getElementById('prog-detail');
+  prog.style.display = 'block';
+  
+  try {
+    // 阶段0: 提取元信息
+    if (!analysisProgress.sourceMeta) {
+      pt.textContent = '提取作品信息...'; pf.style.width = '5%';
+      var metaR = await api('/api/deconstruct/chunk/meta', {method:'POST', body:JSON.stringify({content: analysisProgress.fullText.substring(0, 2000)})});
+      if (metaR.ok) analysisProgress.sourceMeta = metaR.meta;
+      saveProgress();
+    }
+    
+    // 阶段1: 分块摘要
+    if (analysisProgress.step === 'summarize') {
+      var chunks = analysisProgress.chunks;
+      for (var i = analysisProgress.chunkIndex; i < chunks.length; i++) {
+        pt.textContent = '摘要中...';
+        pf.style.width = (5 + (i / chunks.length) * 45) + '%';
+        pd.textContent = '第 ' + (i+1) + '/' + chunks.length + ' 块 (' + chunks[i].length + '字)';
+        var r = await api('/api/deconstruct/chunk/summarize', {method:'POST', body:JSON.stringify({content: chunks[i], chunk_index: i, total_chunks: chunks.length})});
+        if (!r.ok) { toast('摘要失败: ' + r.error); analysisProgress.chunkIndex = i; saveProgress(); document.getElementById('btn-resume').style.display=''; return; }
+        analysisProgress.chunkSummaries.push(r.summary);
+        analysisProgress.chunkIndex = i + 1;
+        saveProgress();
+      }
+      analysisProgress.step = 'merge';
+    }
+    
+    // 阶段2: 合并摘要
+    if (analysisProgress.step === 'merge') {
+      pt.textContent = '合并全书梗概...'; pf.style.width = '52%';
+      pd.textContent = '';
+      var mr = await api('/api/deconstruct/chunk/merge', {method:'POST', body:JSON.stringify({chunk_summaries: analysisProgress.chunkSummaries})});
+      if (!mr.ok) { toast('合并失败: ' + mr.error); saveProgress(); document.getElementById('btn-resume').style.display=''; return; }
+      analysisProgress.fullSummary = mr.summary;
+      analysisProgress.step = 'analyze';
+      analysisProgress.dimIndex = 0;
+      saveProgress();
+    }
+    
+    // 阶段3: 逐维度分析
+    if (analysisProgress.step === 'analyze') {
+      var dims = analysisProgress.dims;
+      for (var j = analysisProgress.dimIndex; j < dims.length; j++) {
+        var dim = dims[j];
+        pt.textContent = '分析维度: ' + (dimLabels[dim]||dim);
+        pf.style.width = (55 + (j / dims.length) * 40) + '%';
+        pd.textContent = '第 ' + (j+1) + '/' + dims.length + ' 维';
+        var sample = '';
+        if (dim === 'characters' || dim === 'worldbuilding') {
+          sample = analysisProgress.fullText.substring(0, 5000);
+        }
+        var ar = await api('/api/deconstruct/chunk/analyze', {method:'POST', body:JSON.stringify({summary: analysisProgress.fullSummary, dimension: dim, content_sample: sample})});
+        if (!ar.ok) { toast('维度分析失败: ' + ar.error); analysisProgress.dimIndex = j; saveProgress(); document.getElementById('btn-resume').style.display=''; return; }
+        analysisProgress.dimResults[dim] = ar.result;
+        analysisProgress.dimIndex = j + 1;
+        saveProgress();
+        // 实时显示已完成维度
+        renderResults(analysisProgress.dimResults, analysisProgress.dims);
+        document.getElementById('transform').style.display = 'block';
+      }
+      analysisProgress.step = 'done';
+    }
+    
+    // 完成
+    pf.style.width = '100%'; pt.textContent = '分析完成'; pd.textContent = '';
+    deconData = Object.assign({source_meta: analysisProgress.sourceMeta}, analysisProgress.dimResults);
+    renderResults(deconData, analysisProgress.dims);
+    document.getElementById('transform').style.display = 'block';
+    updateDistillStrategyRow();
+    autoSave();
+    clearProgress();
+    setTimeout(function(){prog.style.display='none'},2000);
+    toast('拆书完成！');
+    
+  } catch(e) { 
+    toast('分析失败: ' + e.message); 
+    saveProgress(); 
+    document.getElementById('btn-resume').style.display='';
+  }
+}
+
+async function resumeAnalysis() {
+  var p = loadProgress();
+  if (!p) { toast('没有可恢复的进度'); return; }
+  analysisProgress = p;
+  await runIncremental();
+}
+
+function renderResults(data, dims) {
+  var el = document.getElementById('results');
+  var html = '<div class="tabs">';
+  dims.forEach(function(d,i){ html += '<div class="tab'+(i===0?' active':'')+'" onclick="switchTab(\''+d+'\',this)">'+dimLabels[d]+'</div>'; });
+  html += '</div>';
+  dims.forEach(function(d,i){ html += '<div class="tab-content" id="tab-'+d+'" style="'+(i===0?'':'display:none')+'"><div class="result-section"><div class="result-body open"><pre>'+JSON.stringify(data[d]||{},null,2)+'</pre></div></div></div>'; });
+  el.innerHTML = html;
+}
+
+function switchTab(dim, el) {
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  el.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(function(c){c.style.display='none'});
+  document.getElementById('tab-'+dim).style.display = 'block';
+}
+
+async function doTransform() {
+  if (!deconData) { toast('请先完成拆书分析'); return; }
+  var genre = document.getElementById('my-genre').value.trim() || '玄幻';
+  var tone = document.getElementById('my-tone').value.trim() || '热血';
+  var idea = document.getElementById('my-idea').value.trim();
+  var prog = document.getElementById('progress');
+  prog.style.display = 'block';
+  document.getElementById('prog-text').textContent = '转化中...';
+  document.getElementById('prog-fill').style.width = '30%';
+  try {
+    var r = await api('/api/deconstruct/transform', {method:'POST', body:JSON.stringify({deconstruction:deconData,user_vision:{genre:genre,tone:tone,core_idea:idea,constraints:['不要抄袭原文','创造原创设定']}})});
+    if (!r.ok) { toast(r.error); prog.style.display='none'; return; }
+    var t = r.transformed || r.result || {};
+    document.getElementById('prog-fill').style.width = '100%';
+    setTimeout(function(){prog.style.display='none'},1000);
+    renderPreview(t);
+  } catch(e) { toast('转化失败: '+e.message); prog.style.display='none'; }
+}
+
+function renderPreview(t) {
+  var el = document.getElementById('preview');
+  var html = '<div class="result-section"><div class="result-header">🌍 世界观卡片</div><div class="result-body open"><pre>'+JSON.stringify(t.worldview_cards||[],null,2)+'</pre></div></div>';
+  html += '<div class="result-section"><div class="result-header">👤 角色卡片 ('+(t.character_cards||[]).length+'人)</div><div class="result-body open"><pre>'+JSON.stringify(t.character_cards||[],null,2)+'</pre></div></div>';
+  html += '<div class="result-section"><div class="result-header">📋 大纲蓝图</div><div class="result-body open"><pre>'+JSON.stringify(t.outline_blueprint||{},null,2)+'</pre></div></div>';
+  el.innerHTML = html;
+  document.querySelectorAll('.result-header').forEach(function(h){h.onclick=function(){this.nextElementSibling.classList.toggle('open')}});
+  // 显示导入按钮
+  document.getElementById('btn-import').style.display = '';
+}
+
+var transformedData = null;
+
+// 保存转化结果供导入使用
+var origRenderPreview = renderPreview;
+renderPreview = function(t) {
+  transformedData = t;
+  origRenderPreview(t);
+};
+
+async function importToProject() {
+  if (!transformedData) { toast('请先完成转化'); return; }
+  var btn = document.getElementById('btn-import');
+  btn.textContent = '导入中...'; btn.disabled = true;
+  var imported = 0;
+  var errors = [];
+  
+  try {
+    // 1. 导入世界观设定
+    if (transformedData.worldview_cards && transformedData.worldview_cards.length) {
+      var worldText = '';
+      transformedData.worldview_cards.forEach(function(w) {
+        worldText += '【' + (w.world_name||'未知世界') + '】\n';
+        if (w.core_rules) worldText += '核心规则: ' + w.core_rules.join('；') + '\n';
+        if (w.power_system) {
+          worldText += '力量体系: ' + (w.power_system.name||'') + '(' + (w.power_system.type||'') + ')\n';
+          if (w.power_system.rules) worldText += '  规则: ' + w.power_system.rules.join('；') + '\n';
+          if (w.power_system.hierarchy) worldText += '  等级: ' + w.power_system.hierarchy + '\n';
+        }
+        if (w.geography) {
+          w.geography.forEach(function(g) {
+            worldText += '地理: ' + (g.name||'') + '(' + (g.type||'') + ') - ' + (g.features||'') + '\n';
+          });
+        }
+        if (w.factions) {
+          w.factions.forEach(function(f) {
+            worldText += '势力: ' + (f.name||'') + ' - ' + (f.goal||'') + '\n';
+          });
+        }
+        if (w.unique_appeal) worldText += '独特卖点: ' + w.unique_appeal + '\n';
+        worldText += '\n';
+      });
+      try {
+        var worldData = {};
+        transformedData.worldview_cards.forEach(function(w, i) {
+          worldData['world_' + (i+1) + '_name'] = w.world_name || '';
+          worldData['world_' + (i+1) + '_rules'] = (w.core_rules||[]).join('；');
+          if (w.power_system) {
+            worldData['world_' + (i+1) + '_power'] = (w.power_system.name||'') + '(' + (w.power_system.type||'') + ')';
+            worldData['world_' + (i+1) + '_hierarchy'] = w.power_system.hierarchy || '';
+          }
+          if (w.unique_appeal) worldData['world_' + (i+1) + '_appeal'] = w.unique_appeal;
+          if (w.geography) worldData['world_' + (i+1) + '_geo'] = w.geography.map(function(g){return g.name}).join('、');
+          if (w.factions) worldData['world_' + (i+1) + '_factions'] = w.factions.map(function(f){return f.name}).join('、');
+        });
+        var r = await api('/api/project/settings', {method:'POST', body:JSON.stringify({world_settings: worldData})});
+        if (r.ok) imported++; else errors.push('世界观: ' + (r.error||'失败'));
+      } catch(e) { errors.push('世界观: ' + e.message); }
+    }
+    
+    // 2. 导入角色设定
+    if (transformedData.character_cards && transformedData.character_cards.length) {
+      var charText = '';
+      transformedData.character_cards.forEach(function(c) {
+        charText += '【' + (c.name||'未知') + '】(' + (c.archetype||'') + ')\n';
+        if (c.role) charText += '定位: ' + c.role + '\n';
+        if (c.goals) charText += '目标: ' + c.goals.join('；') + '\n';
+        if (c.flaws) charText += '缺陷: ' + c.flaws.join('；') + '\n';
+        if (c.arc_description) charText += '弧线: ' + c.arc_description + '\n';
+        if (c.relationships) {
+          c.relationships.forEach(function(r) {
+            charText += '关系: ' + (r.with||'') + '(' + (r.type||'') + ') - ' + (r.dynamics||'') + '\n';
+          });
+        }
+        charText += '\n';
+      });
+      try {
+        var charData = {};
+        transformedData.character_cards.forEach(function(c, i) {
+          charData['char_' + (i+1) + '_name'] = c.name || '';
+          charData['char_' + (i+1) + '_archetype'] = c.archetype || '';
+          charData['char_' + (i+1) + '_role'] = c.role || '';
+          if (c.goals) charData['char_' + (i+1) + '_goals'] = c.goals.join('；');
+          if (c.flaws) charData['char_' + (i+1) + '_flaws'] = c.flaws.join('；');
+          if (c.arc_description) charData['char_' + (i+1) + '_arc'] = c.arc_description;
+          if (c.relationships) charData['char_' + (i+1) + '_relations'] = c.relationships.map(function(r){return (r.with||'')+'('+ (r.type||'') +')'}).join('、');
+        });
+        var r2 = await api('/api/project/settings', {method:'POST', body:JSON.stringify({character_settings: charData})});
+        if (r2.ok) imported++; else errors.push('角色: ' + (r2.error||'失败'));
+      } catch(e) { errors.push('角色: ' + e.message); }
+    }
+    
+    // 3. 导入大纲
+    if (transformedData.outline_blueprint && transformedData.outline_blueprint.chapters) {
+      var outlineText = '';
+      var ob = transformedData.outline_blueprint;
+      if (ob.title) outlineText += '# ' + ob.title + '\n\n';
+      if (ob.acts) {
+        ob.acts.forEach(function(a) {
+          outlineText += '## ' + (a.name||'') + '\n' + (a.summary||'') + '\n';
+          if (a.key_beats) outlineText += '关键节点: ' + a.key_beats.join('；') + '\n';
+          outlineText += '\n';
+        });
+      }
+      if (ob.chapters) {
+        outlineText += '## 章节大纲\n';
+        ob.chapters.forEach(function(ch) {
+          outlineText += '第' + (ch.number||'?') + '章 ' + (ch.title||'') + ': ' + (ch.summary||'') + '\n';
+          if (ch.key_scenes) outlineText += '  场景: ' + ch.key_scenes.join('；') + '\n';
+        });
+      }
+      try {
+        var r3 = await api('/api/project/outline', {method:'POST', body:JSON.stringify({outline: outlineText})});
+        if (r3.ok) imported++; else errors.push('大纲: ' + (r3.error||'失败'));
+      } catch(e) { errors.push('大纲: ' + e.message); }
+    }
+    
+    btn.textContent = '📥 导入到项目'; btn.disabled = false;
+    if (errors.length) {
+      toast('部分导入失败: ' + errors.join('；'));
+    } else {
+      toast('成功导入 ' + imported + ' 项设定到当前项目！');
+    }
+  } catch(e) {
+    btn.textContent = '📥 导入到项目'; btn.disabled = false;
+    toast('导入失败: ' + e.message);
+  }
+}
+
+async function distillWritingSkills() {
+  var text = document.getElementById('input').value.trim();
+  if (text.length < 1000) { toast('文本过短，请提供至少1000字'); return; }
+
+  // 读取蒸馏策略
+  var strategyRadio = document.querySelector('input[name="distill-strategy"]:checked');
+  var sourceType = strategyRadio ? strategyRadio.value : 'raw';
+
+  // decon策略必须有拆书数据，否则降级为raw
+  if (sourceType === 'decon' && !deconData) {
+    toast('未检测到拆书数据，已自动切换为原始文本蒸馏');
+    sourceType = 'raw';
+  }
+
+  var btn = document.getElementById('btn-distill');
+  var orig = btn.textContent;
+  btn.textContent = '蒸馏中...'; btn.disabled = true;
+
+  try {
+    var novelName = (document.getElementById('my-genre') || {}).value || '未命名小说';
+    var payload = {
+      novel_text: text,
+      novel_name: novelName,
+      import_to_project: true,
+      source_type: sourceType
+    };
+    // decon策略携带拆书五维分析数据
+    if (sourceType === 'decon' && deconData) {
+      payload.decon_data = deconData;
+    }
+
+    var resp = await api('/api/skills/distill', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) { toast(resp.error || '蒸馏失败'); return; }
+
+    var stats = '候选 ' + (resp.candidate_count || 0) + ' → 验证 ' + (resp.verified_count || 0) + ' → 技能 ' + (resp.skill_count || 0) + ' → 导入 ' + (resp.imported_count || 0);
+    if (sourceType === 'decon') { stats = '[拆书数据策略] ' + stats; }
+    toast(stats);
+
+    if (resp.skills && resp.skills.length) {
+      window._lastDeconSkill = resp.skills[0];
+      var impBtn = document.getElementById('btn-import');
+      if (impBtn) impBtn.style.display = 'inline-block';
+    }
+  } catch(e) {
+    toast('蒸馏失败: ' + e.message);
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
+  }
+}
+
+</script>
+</body>
+</html>

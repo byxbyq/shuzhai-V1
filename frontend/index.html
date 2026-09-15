@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>书斋</title>
+<script>
+// 抑制 TRAE/Electron 底层错误 + 网络超时等非应用错误
+(function() {
+  var originalError = console.error;
+  console.error = function() {
+    var msg = Array.prototype.slice.call(arguments).join(' ');
+    // 屏蔽TRAE底层、网络超时、字体加载等非应用错误
+    var suppress = ['preload', 'ENOENT', 'getThemeColors', 'exportedColors',
+      'ERR_CONNECTION_TIMED_OUT', 'ERR_CONNECTION_REFUSED', 'net::ERR_',
+      'fonts.googleapis', 'fonts.gstatic', 'Failed to fetch resource'];
+    for (var i = 0; i < suppress.length; i++) {
+      if (msg.indexOf(suppress[i]) >= 0) return;
+    }
+    return originalError.apply(console, arguments);
+  };
+  // 同时屏蔽console.warn中的网络/字体警告
+  var originalWarn = console.warn;
+  console.warn = function() {
+    var msg = Array.prototype.slice.call(arguments).join(' ');
+    var suppress = ['ERR_CONNECTION_TIMED_OUT', 'net::ERR_', 'fonts.googleapis', 'fonts.gstatic'];
+    for (var i = 0; i < suppress.length; i++) {
+      if (msg.indexOf(suppress[i]) >= 0) return;
+    }
+    return originalWarn.apply(console, arguments);
+
+  };
+})();
+
+// 全局兜底 showToast：如果 check-panel.js 未加载或失败，确保所有按钮点击都有输出
+window.showToast = function(msg) {
+  console.log('[Toast]', msg);
+  // 尝试创建临时 toast 显示
+  var el = document.getElementById('toast');
+  if (el) {
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(function() { el.classList.remove('show'); }, 2500);
+  }
+};
+</script>
+<link rel="icon" href="favicon.ico">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c75b39">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="书斋">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="stylesheet" href="css/style.css?v=239">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/reader.css?v=208">
+<script>
+// APK模式检测：APK环境自动启用离线模式，不再需要服务器
+var _isAPK = /Android/i.test(navigator.userAgent) && !!window.Capacitor;
+var _isAndroid = /Android/i.test(navigator.userAgent);
+var _isFileProtocol = window.location.protocol === 'file:';
+
+// 离线模式：file://协议且未配置服务器（APK有Python后端，不启用离线模式）
+window._isOfflineMode = (_isFileProtocol && !localStorage.getItem('shuzhai_server')) || false;
+if (_isAPK) {
+  // APK有内嵌Python后端，不使用离线模式
+  window._isOfflineMode = false;
+  console.log('[离线模式] APK有内嵌后端，使用API模式');
+}
+
+// APK环境跳过服务器配置页，直接进入离线模式
+if (_isAPK) {
+  // 已是离线模式，不跳转
+} else if (_isFileProtocol && !localStorage.getItem('shuzhai_server') && !localStorage.getItem('shuzhai_offline_enabled')) {
+  window.location.href = 'server-config.html';
+}
+
+// PWA Service Worker 注册（APK/离线环境跳过）
+if ('serviceWorker' in navigator && window.location.protocol !== 'file:' && !_isAPK && !_isAndroid) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js')
+      .then(function(reg) { console.log('[PWA] SW 注册成功', reg.scope); })
+      .catch(function(err) { console.warn('[PWA] SW 注册失败', err); });
+  });
+}
+// APK/Android环境：注销可能已注册的旧Service Worker
+if (_isAPK || _isAndroid) {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){ r.unregister(); });
+    });
+  }
+  // 清除所有缓存
+  if ('caches' in window) {
+    caches.keys().then(function(names){ names.forEach(function(n){ caches.delete(n); }); });
+  }
+}
+
+// 离线模式初始化
+if (window._isOfflineMode) {
+  console.log('[离线模式] APK离线模式已启用');
+  // 离线模式下初始化IndexedDB
+  document.addEventListener('DOMContentLoaded', function() {
+    // 修复 bottombar 和 overlay 确保在 .app 内部（立即执行 + load 时再确认）
+    var _fixBB = function() {
+      var app = document.getElementById('app');
+      var bb = document.querySelector('.bottombar');
+      var ol = document.getElementById('chapter-outline-overlay');
+      if (bb && bb.parentElement !== app) app.appendChild(bb);
+      if (ol && ol.parentElement !== app) app.appendChild(ol);
+    };
+    _fixBB();
+    window.addEventListener('load', _fixBB);
+    if (window.OfflineDB) {
+      OfflineDB.open().then(function() {
+        console.log('[离线模式] IndexedDB已打开');
+      }).catch(function(e) {
+        console.error('[离线模式] IndexedDB打开失败:', e);
+      });
+    }
+  });
+}
+</script>
+
+<script>
+// 全局工具函数：HTML转义，防止XSS
+
+function loadSkillPacks() {
+  // 从后端加载已导入的技能包到 SkillPack 缓存
+  if (typeof SkillPack !== 'undefined' && typeof SkillPack.loadImported === 'function') {
+    SkillPack.loadImported().then(function() { renderSkillPackPanel(); }).catch(function() { renderSkillPackPanel(); });
+  } else {
+    renderSkillPackPanel();
+  }
+}
+function renderSkillPackPanel(scope) {
+  // 使用 SkillPack API 获取所有技能包（内置+导入），按 scope 过滤
+  var allSkills = (typeof SkillPack !== 'undefined' && typeof SkillPack.listAll === 'function') ? SkillPack.listAll() : (window._skillPacks || []);
+  scope = scope || 'generate'; // 默认写作范围
+  var skills = allSkills.filter(function(s) { return !s.scope || s.scope === scope || s.scope === 'all'; });
+  
+  var h = '<div class="p-3" ><h3 style="margin:0 0 4px;font-size:14px">技能包</h3>';
+  h += '<div style="display:flex;gap:4px;margin:6px 0;flex-wrap:wrap;font-size:10px">';
+  var scopes = ['all','generate','world','outline','character','style','import'];
+  var scopeLabels = {'all':'全部','generate':'写作','world':'世界观','outline':'大纲','character':'人物','style':'文风','import':'导入'};
+  scopes.forEach(function(sc) {
+    h += '<button onclick="renderSkillPackPanel(\''+sc+'\')" style="padding:2px 8px;border:1px solid '+(sc===scope?'var(--accent)':'var(--border)')+';border-radius:12px;background:'+(sc===scope?'var(--accent-soft)':'transparent')+';color:'+(sc===scope?'var(--accent)':'var(--muted)')+';cursor:pointer">'+(scopeLabels[sc]||sc)+'</button>';
+  });
+  h += '</div>';
+  
+  var enabledIds = [];
+  try { enabledIds = JSON.parse(localStorage.getItem('shuzhai_skills_enabled')||'[]'); } catch(e) {}
+  
+  if (skills.length === 0) h += '<p style="color:var(--muted);font-size:12px">此范围暂无技能包</p>';
+  else skills.forEach(function(sk) {
+    var active = enabledIds.indexOf(sk.id) >= 0;
+    h += '<div style="padding:8px;margin:4px 0;border:1px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';border-radius:4px;cursor:pointer;font-size:11px" onclick="toggleSkillById(\''+(sk.id||'')+'\',\''+(scope||'generate')+'\')">';
+    h += '<strong>' + (sk.name || sk.title || sk.id) + '</strong>' + (active ? ' <span style="color:var(--accent);font-size:10px">[ON]</span>' : '');
+    h += (sk.builtin ? ' <span style="font-size:9px;color:var(--muted)">内置</span>' : '');
+    h += '<br><span style="color:var(--muted);font-size:10px">' + (sk.description || '') + '</span>';
+    h += '</div>';
+  });
+  h += '<div style="margin-top:10px"><button onclick="importSkillPack()" style="padding:4px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:4px;font-size:11px;cursor:pointer">导入新包</button></div></div>';
+  
+  var p = document.getElementById('skill-pack-panel');
+  if (!p) { p = document.createElement('div'); p.id = 'skill-pack-panel'; p.style.cssText = 'position:fixed;top:80px;right:20px;width:320px;max-height:550px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.4)'; document.body.appendChild(p); }
+  p.innerHTML = h; p.style.display = 'block';
+}
+function toggleSkillById(skillId, scope) {
+  if (!skillId) return;
+  // 使用 SkillPack toggle（管理 localStorage enabled 状态）
+  var wasEnabled = false;
+  try {
+    var enabledIds = JSON.parse(localStorage.getItem('shuzhai_skills_enabled')||'[]');
+    wasEnabled = enabledIds.indexOf(skillId) >= 0;
+  } catch(e) {}
+  
+  if (typeof SkillPack !== 'undefined' && typeof SkillPack.toggle === 'function') {
+    SkillPack.toggle(skillId);
+  } else {
+    var enabled = JSON.parse(localStorage.getItem('shuzhai_skills_enabled')||'[]');
+    var idx = enabled.indexOf(skillId);
+    if (idx >= 0) enabled.splice(idx, 1); else enabled.push(skillId);
+    localStorage.setItem('shuzhai_skills_enabled', JSON.stringify(enabled));
+  }
+  
+  // 获取激活的技能规则文本——传给生成API
+  window._activeSkillRules = (typeof SkillPack !== 'undefined' && typeof SkillPack.getActiveRules === 'function')
+    ? SkillPack.getActiveRules(scope || 'generate')
+    : '';
+  
+  var sk = (typeof SkillPack !== 'undefined' && typeof SkillPack.getSkill === 'function') ? SkillPack.getSkill(skillId) : null;
+  var skName = sk ? (sk.name || sk.id) : skillId;
+  showToast((wasEnabled ? '已停用: ' : '已激活: ') + skName);
+  renderSkillPackPanel(scope);
+}
+function importSkillPack() {
+  if (typeof SkillPack !== 'undefined' && typeof SkillPack.importSkill === 'function') {
+    // Use SkillPack's import
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
+    inp.onchange = function() {
+      var f = inp.files[0]; if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        try {
+          SkillPack.importSkill(reader.result);
+          // Also save to backend
+          var d = JSON.parse(reader.result);
+          api('/api/skills/import', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(d)})
+            .then(function(rr) { return rr.json(); })
+            .then(function(dd) { 
+              if (dd.ok || dd.error) { /* backend save done */ }
+            }).catch(function(){});
+          showToast('已导入'); renderSkillPackPanel();
+        } catch(e) { showToast('JSON错误:'+e.message); }
+      };
+      reader.readAsText(f);
+    };
+    inp.click();
+  } else {
+    // Fallback: our simpler import
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
+    inp.onchange = function() {
+      var f = inp.files[0]; if (!f) return;
+      var r = new FileReader();
+      r.onload = function() {
+        try {
+          var d = JSON.parse(r.result);
+          api('/api/skills/import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d)})
+            .then(function(rr) { return rr.json(); })
+            .then(function(dd) { if (dd.ok) { showToast('已导入'); loadSkillPacks(); } else showToast('失败:'+(dd.error||'')); });
+        } catch(e) { showToast('JSON错误:'+e.message); }
+      };
+      r.readAsText(f);
+    };
+    inp.click();
+  }
+}
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  // 处理数组：每个元素用换行分隔，转成可读文本
+  if (Array.isArray(str)) {
+    return str.map(function(item) {
+      if (item === null || item === undefined) return '';
+      // 数组元素若是对象，转成 "key: value, ..." 格式
+      if (typeof item === 'object') {
+        return Object.keys(item).map(function(k) {
+          return k + ': ' + (item[k] || '');
+        }).join(', ');
+      }
+      return String(item);
+    }).join('\n');
+  }
+  // 处理普通对象：转成 "key: value, ..." 格式
+  if (typeof str === 'object') {
+    return Object.keys(str).map(function(k) {
+      return k + ': ' + (str[k] || '');
+    }).join(', ');
+  }
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+</script>
+
+    <link rel="stylesheet" href="css/check-panel.css">
+</head>
+<body>
+<!-- 命令面板 (Ctrl+P / Ctrl+K) -->
+<div id="cmd-palette-overlay" class="overlay-backdrop" style="display:none;z-index:3000;align-items:flex-start;justify-content:center;padding-top:12vh">
+  <div id="cmd-palette" style="width:92%;max-width:560px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 16px 48px rgba(0,0,0,0.5);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)">
+      <span style="font-size:16px;color:var(--muted)">⌘</span>
+      <input id="cmd-input" type="text" placeholder="输入命令名称搜索... (上下键选择, 回车执行, Esc关闭)" autocomplete="off" style="flex:1;border:none;outline:none;background:transparent;color:var(--text);font-size:14px;font-family:var(--sans)">
+      <span id="cmd-count" style="font-size:11px;color:var(--muted);min-width:36px;text-align:right">0</span>
+    </div>
+    <div id="cmd-list" style="max-height:50vh;overflow-y:auto;padding:6px"></div>
+  </div>
+</div>
+<div class="app" id="app">
+  <div class="topbar" id="topbar">
+    <div class="topbar-left">
+      <button class="icon-btn" id="btn-toggle-left"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+      <span class="project-name" id="project-name">加载中...</span>
+      <span class="chapter-name" id="current-chapter-label"></span>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="btn-new-project" title="新建项目"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg></button>
+      <button class="icon-btn" id="btn-open-project" title="打开项目"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+      <div class="project-dropdown" id="project-dropdown" style="display:none;position:absolute;top:40px;left:80px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);min-width:240px;max-width:320px;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-height:70vh;overflow-y:auto;overscroll-behavior:contain">
+        <div style="padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">最近项目</div>
+        <div id="project-list"></div>
+      </div>
+      <span class="model-badge unconfigured" id="model-badge" onclick="toggleModelPopover(event)" style="cursor:pointer"><span class="conn-dot"></span>未配置<span class="model-tooltip">点击配置 AI 模型</span></span>
+      <button class="icon-btn" id="btn-reader" title="阅读模式" style="font-size:16px">📖</button>
+      <span style="position:relative;margin-right:6px;display:inline-block;z-index:500">
+        <button onclick="toggleToolbox(event)" style="font-size:11px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;font-family:var(--sans);position:relative;z-index:501" title="更多工具">🧰 工具箱</button>
+        <div id="toolbox-dropdown" style="display:none;position:absolute;top:32px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);min-width:180px;z-index:502;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+                    <div class="tb-item tab-item-md" onclick="WhiteCityEditor.toggle()">🏯 白城主</div>
+<div class="tb-item tab-item-md" onclick="openToolboxPage('/deconstruct.html')" >📖 拆书学习</div>
+          <div class="tb-item tab-item-md" onclick="openToolboxPage('/storyboard.html')" >🎬 视频分镜</div>
+          <div class="tb-item tab-item-md" onclick="openExportPanel()"> 📥 导出书籍</div>
+          <div class="tb-item tab-item-md" onclick="openImportPanel()" >📤 导入小说</div>
+          <div class="tb-item tab-item-md" onclick="openSnapshotDiffPanel()" >📋 版本对比</div>
+          <div class="tb-item tab-item-md" onclick="openCharacterChatPanel()"> 💬 角色对话</div>
+          <div class="tb-item tab-item-md" onclick="openSyncPanel()" >☁️ 云同步</div>
+          <div class="tb-item tab-item-md" onclick="openTemplatePanel()" >📐 大纲模板</div>
+          <div class="tb-item tab-item-md" onclick="quickQualityCheck('outline-quality')"> 📋 检查大纲</div>
+          <div class="tb-item tab-item-md" onclick="quickQualityCheck('settings-quality')" >🌍 检查设定</div>
+          <div class="tb-item tab-item-md" onclick="quickQualityCheck('characters-quality')" >👤 检查人物</div>
+          <div class="tb-item tab-item-md" onclick="openAIEditorPanel()"> 📋 AI责编审稿</div>
+          <div class="tb-item tab-item-md" onclick="openBatchCheckPanel()" >🔍 批量检查</div>
+          <div class="tb-item tab-item-md" onclick="openStatsPanel()" >📊 写作统计</div>
+          <div class="tb-item tab-item-md" onclick="openSkillPackPanel()"> 🧩 技能包</div>
+          <div class="tb-item tab-item-md" onclick="openAIAnalysisPanel()" >🔬 AI分析</div>
+          <div class="tb-item tab-item-md" onclick="openPlanningPanel('grid')" >📐 规划视图</div>
+          <div class="tb-item tab-item-md" onclick="openAuditLogPanel()"> 📋 审计日志</div>
+          <div class="tb-item tab-item-md" onclick="openQuickModePanel()" >⚡ 快速模式</div>
+          <div class="tb-item" onclick="openDistillPanel()" style="padding:8px 12px;cursor:pointer;font-size:12px">🧠 蒸馏记忆</div>
+        </div>
+      </span>
+      <button class="icon-btn tab-item-md" id="btn-toggle-right"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></button>
+    </div>
+  </div>
+  <div class="main tab-item-md" id="main">
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <!-- LEFT DRAWER -->
+    <div class="left-drawer tab-item-md" id="left-drawer">
+      <button class="right-drawer-close close-btn-xs" id="btn-close-left" >✕</button>
+      <!-- Workflow Step Indicator -->
+      <div class="workflow-steps tab-item-md" id="workflow-steps">
+        <div class="step-item active" data-step="1" onclick="goToStep(1)">
+          <div class="step-circle tab-item-md">1</div>
+          <span class="step-label">世界观</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item tab-item-md" data-step="2" onclick="goToStep(2)">
+          <div class="step-circle">2</div>
+          <span class="step-label">人物</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="3" onclick="goToStep(3)">
+          <div class="step-circle">3</div>
+          <span class="step-label">全书大纲</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="4" onclick="goToStep(4)">
+          <div class="step-circle">4</div>
+          <span class="step-label">分卷纲要</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="5" onclick="goToStep(5)">
+          <div class="step-circle">5</div>
+          <span class="step-label">章节大纲</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="6" onclick="goToStep(6)">
+          <div class="step-circle">6</div>
+          <span class="step-label">连线框</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="7" onclick="goToStep(7)">
+          <div class="step-circle">7</div>
+          <span class="step-label">写作</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="8" onclick="goToStep(8)">
+          <div class="step-circle">8</div>
+          <span class="step-label">时间线</span>
+        </div>
+        <span class="step-arrow">&rarr;</span>
+        <div class="step-item" data-step="9" onclick="goToStep(9)">
+          <div class="step-circle">9</div>
+          <span class="step-label">草稿定稿</span>
+        </div>
+      </div>
+
+      <!-- Step 1: Settings Panel -->
+      <div class="left-tab-content active" data-step="1">
+        <div class="scroll-content">
+          <!-- AI分析输入区 -->
+          <div class="ai-extract-box" id="ai-extract-box" style="padding:16px 18px;border-bottom:1px solid var(--border-soft);background:var(--surface)">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <svg class="svg-icon-2" viewBox="0 0 24 24" width="14" height="14" ><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              粘贴内容或拖入文件，AI自动提取世界观、风格、角色等设定
+            </div>
+            <!-- 拖拽上传区 -->
+            <div id="ai-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:20px 14px;text-align:center;margin-bottom:10px;cursor:pointer;transition:all var(--motion-fast)">
+              <svg viewBox="0 0 24 24" width="28" height="28" style="stroke:var(--muted);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;margin-bottom:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <div class="text-base text-muted" >拖拽文件到此处，或<span style="color:var(--accent);cursor:pointer;text-decoration:underline">点击选择文件</span></div>
+              <div style="font-size:11px;color:var(--muted);opacity:0.6;margin-top:4px">支持 .txt .md .docx .xlsx .csv .pdf</div>
+              <input class="hidden" type="file" id="ai-file-input" accept=".txt,.md,.docx,.xlsx,.csv,.pdf,.text,.markdown"  multiple>
+            </div>
+            <textarea id="ai-extract-input" placeholder="或在此手动粘贴内容……" style="width:100%;min-height:72px;max-height:220px;padding:10px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--sans);resize:vertical;line-height:1.6"></textarea>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <button id="btn-ai-extract" style="flex:1;padding:8px 14px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-family:var(--sans);font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;min-width:140px">
+                <svg class="svg-icon-2" viewBox="0 0 24 24" width="16" height="16" ><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                🤖 AI分析并提取设定
+              </button>
+              <button class="btn-ghost-sm" id="btn-ai-extract-clear" onclick="document.getElementById('ai-extract-input').value='';var r=document.getElementById('ai-extract-result');if(r){r.style.display='none';r.innerHTML='';}" >清空</button>
+              <button class="btn-ghost-sm" id="btn-export-settings"  title="导出设定为JSON文件">📥 导出</button>
+              <button id="btn-import-settings" style="padding:6px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--sans)" title="从JSON文件导入设定">📤 导入</button>
+              <input class="hidden" type="file" id="settings-file-input" accept=".json" >
+            </div>
+            <div class="mt-2 hidden" id="ai-extract-result"></div>
+          </div>
+          <div class="settings-editor" id="settings-editor"></div>
+
+          <!-- 结构化世界观：叙事风格 -->
+          <div class="world-meta-box card-item" id="world-meta-narrative">
+            <div class="title-ink-md" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+              <span>✍️ 叙事风格</span>
+              <button id="btn-ai-gen-narrative" class="btn-sm ai">🤖 AI生成</button>
+            </div>
+            <div class="grid-2-xs">
+              <div class="char-field"><label>叙事视角</label><select id="ns-pov" onchange="saveWorldMeta()">
+                <option value="">未设定</option>
+                <option value="第三人称限知">第三人称限知</option>
+                <option value="第三人称全知">第三人称全知</option>
+                <option value="第一人称">第一人称</option>
+                <option value="多视角">多视角</option>
+              </select></div>
+              <div class="char-field"><label>时态</label><select id="ns-tense" onchange="saveWorldMeta()">
+                <option value="">未设定</option>
+                <option value="过去时">过去时</option>
+                <option value="现在时">现在时</option>
+              </select></div>
+              <div class="char-field"><label>基调</label><select id="ns-tone" onchange="saveWorldMeta()">
+                <option value="">未设定</option>
+                <option value="冷峻">冷峻</option>
+                <option value="热血">热血</option>
+                <option value="诙谐">诙谐</option>
+                <option value="沉重">沉重</option>
+                <option value="悲壮">悲壮</option>
+                <option value="轻松">轻松</option>
+              </select></div>
+              <div class="char-field"><label>节奏</label><select id="ns-pacing" onchange="saveWorldMeta()">
+                <option value="">未设定</option>
+                <option value="快节奏">快节奏</option>
+                <option value="慢热">慢热</option>
+                <option value="张弛有度">张弛有度</option>
+              </select></div>
+              <div class="char-field" style="grid-column:span 2"><label>描写风格</label><input type="text" id="ns-description" placeholder="白描/华丽/意识流…" oninput="debounceSaveWorldMeta()"></div>
+            </div>
+          </div>
+
+          <!-- 结构化世界观：时代环境 -->
+          <div class="world-meta-box card-item" id="world-meta-era">
+            <div class="title-ink-md" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+              <span>🌍 时代环境</span>
+              <button id="btn-ai-gen-era" class="btn-sm ai">🤖 AI生成</button>
+            </div>
+            <div class="grid-2-xs">
+              <div class="char-field"><label>科技水平</label><input type="text" id="era-tech" placeholder="冷兵器/蒸汽/现代…" oninput="debounceSaveWorldMeta()"></div>
+              <div class="char-field"><label>社会制度</label><input type="text" id="era-society" placeholder="封建帝制/共和/部落…" oninput="debounceSaveWorldMeta()"></div>
+              <div class="char-field"><label>地理特征</label><input type="text" id="era-geography" placeholder="大陆+群岛/单一大陆…" oninput="debounceSaveWorldMeta()"></div>
+              <div class="char-field"><label>文化背景</label><input type="text" id="era-culture" placeholder="修仙+世俗并存…" oninput="debounceSaveWorldMeta()"></div>
+              <div class="char-field"><label>社会态度</label><input type="text" id="era-social-attitude" placeholder="崇拜/恐惧/管控/猎杀…" oninput="debounceSaveWorldMeta()"></div>
+            </div>
+          </div>
+
+          <!-- 结构化世界观：世界规则 -->
+          <div class="world-meta-box card-item" id="world-meta-rules">
+            <div class="title-ink-md" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+              <span>⚖️ 世界规则</span>
+              <button onclick="addWorldRule()" style="padding:4px 10px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--muted);font-size:11px;cursor:pointer">+ 添加规则</button>
+            </div>
+            <div class="flex-col-sm" id="world-rules-list" ></div>
+          </div>
+
+          <!-- 灵感碎片→世界观设定（统一风格，写入已有设定编辑器 + 叙事风格/时代环境结构化字段 + 中间编辑面板） -->
+          <div class="card-item world-meta-box" style="margin:10px 12px 14px 12px;border:1px solid var(--accent-soft);background:linear-gradient(180deg, rgba(59,130,246,0.04), transparent);padding:10px 12px;border-radius:var(--radius)">
+            <div class="title-ink-md" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+              <span style="color:var(--accent)">💡 灵感碎片 → 世界观设定（自动生成结构化条目）</span>
+              <button id="btn-world-inspiration-to-structured" class="btn-sm ai">🧠 灵感拆解生成</button>
+            </div>
+            <textarea id="world-inspiration-input" rows="3" placeholder="例：我想写一个清冷钝痛的现实向悬疑短篇，长江下游港口小城雾城，十年前高中好友坠楼案悬而未决，女记者返乡揭开真相，糖水铺、灯塔、船厂是三个核心场景，氛围潮湿沉默，第三人称限知白葭视角……&#10;一句话描述你的小说想法，AI会自动拆解为：核心设定/时代背景/整体风格等世界观9大字段，并同步填充叙事风格结构化面板（点击任一张卡片会显示到中间编辑页）"
+              style="width:100%;padding:10px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:12px;line-height:1.65;resize:vertical;min-height:84px;font-family:var(--sans)"></textarea>
+          </div>
+        </div>
+        <div class="step-panel-nav">
+          <div class="step-nav-spacer"></div>
+          <button class="step-nav-btn primary" onclick="goToStep(2); return false;" title="完成设定编辑进入下一步">✓ 完成设定，下一步 →</button>
+        </div>
+      </div>
+
+
+      <!-- Step 3: Novel Outline Panel -->
+      <div class="left-tab-content" data-step="3">
+        <div class="outline-view-switcher flex-center-xs-topbar" id="novel-outline-view-switcher" >
+          <button class="novs-btn active btn-accent-md" data-view="edit" onclick="switchNovelOutlineView('edit')" >📝 编辑</button>
+          <button class="novs-btn btn-ghost-md" data-view="matrix" onclick="switchNovelOutlineView('matrix')" >📊 矩阵</button>
+          <button class="novs-btn btn-ghost-md" data-view="kanban" onclick="switchNovelOutlineView('kanban')" >📌 看板</button>
+        </div>
+        <div class="scroll-content">
+          <!-- 灵感碎片→全书大纲（统一风格） -->
+          <div class="card-item" style="margin:10px 12px 14px 12px;border:1px solid var(--accent-soft);background:linear-gradient(180deg, rgba(59,130,246,0.04), transparent);padding:10px 12px;border-radius:var(--radius)">
+            <div class="title-ink-md" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+              <span style="color:var(--accent)">💡 灵感碎片 → 全书大纲（主题/核心冲突/故事弧）</span>
+              <button id="btn-novel-inspiration-to-outline" class="btn-sm ai">🧠 灵感拆解生成</button>
+            </div>
+            <textarea id="novel-inspiration-input" rows="3" placeholder="例：雾城码头，十年前高中好友坠楼案，女记者返乡，黑伞男人沉默守候，糖水铺妹妹收藏旧日记，灯塔见证和解，整个故事围绕一句『当年没写完的报道，今天我替你写完』展开。短篇小说，3章完结，现实向。&#10;把你对整本书的碎片想法写下来，AI会自动拆解为：主题/核心冲突/故事弧/节奏控制/预期情感落点 等结构化全书大纲。"
+              style="width:100%;padding:10px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:12px;line-height:1.65;resize:vertical;min-height:84px;font-family:var(--sans)"></textarea>
+          </div>
+          <div class="outline-editor" id="novel-outline-editor"></div>
+        </div>
+        <div class="step-panel-nav">
+          <button class="step-nav-btn" onclick="goToStep(2)">← 上一步</button>
+          <div class="step-nav-spacer"></div>
+          <button class="step-nav-btn primary" onclick="goToStep(4)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Volume Outline Panel -->
+      <div class="left-tab-content" data-step="4">
+        <div class="scroll-content" style="flex:1;min-height:0">
+          <!-- 灵感碎片→分卷纲要（统一风格） -->
+          <div class="card-item" style="margin:10px 12px 10px 12px;border:1px solid var(--accent-soft);background:linear-gradient(180deg, rgba(59,130,246,0.04), transparent);padding:10px 12px;border-radius:var(--radius)">
+            <div class="title-ink-md" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <span style="color:var(--accent)">💡 灵感碎片 → 分卷纲要（主题/概要/关键事件/人物弧光）</span>
+              <div style="display:flex;gap:6px">
+                <button id="btn-vol-inspiration-to-outline" class="btn-sm ai">🧠 灵感拆解生成</button>
+                <button id="btn-vol-outline-ai" onclick="aiGenerateVolumes()" class="btn-sm" style="background:var(--surface);border:1px solid var(--border-soft);color:var(--accent)">🤖 AI分卷</button>
+              </div>
+            </div>
+            <textarea id="volume-inspiration-input" rows="3" placeholder="例：卷一 · 雾起篇 —— 白葭返乡，线索一个个浮出，每一章都揭开『十年前』的一角；卷二 · 破晓篇 —— 真相撕裂，人物关系翻转，最终在灯塔和解。每卷 2~3 章，单卷结尾必须有钩子。&#10;把你对分卷结构的碎片想法写下来，AI会自动拆解为：卷主题、卷概要、关键事件序列、人物弧光4大结构化字段，写入 volumes.outline。"
+              style="width:100%;padding:10px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:12px;line-height:1.65;resize:vertical;min-height:84px;font-family:var(--sans)"></textarea>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:12px;font-weight:600;color:var(--ink)">卷列表</span>
+          </div>
+          <div id="vol-outline-list" style="flex:1;overflow-y:auto;padding:4px 0"></div>
+          <div style="padding:6px 10px;border-top:1px solid var(--border-soft)">
+            <button id="btn-add-volume" onclick="addNewVolume()" style="width:100%;padding:5px 0;border:1px dashed var(--border);border-radius:4px;background:var(--surface);color:var(--muted);font-size:11px;cursor:pointer">+ 新卷</button>
+          </div>
+        </div>
+        <div class="step-panel-nav">
+          <button class="step-nav-btn" onclick="goToStep(3)">← 上一步</button>
+          <div class="step-nav-spacer"></div>
+          <button class="step-nav-btn primary" onclick="goToStep(5)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Character Panel -->
+      <div class="left-tab-content" data-step="2">
+        <div class="scroll-content">
+          <div id="character-panel" style="padding:10px 12px">
+            <!-- 章节选择器 -->
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:6px 8px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border-soft)">
+              <span style="font-size:11px;color:var(--muted);white-space:nowrap">本章人物</span>
+              <select id="char-chapter-select" onchange="onCharChapterChange(this.value)" style="flex:1;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--ink);font-family:var(--sans)"></select>
+            </div>
+            <!-- 本章出场人物列表 -->
+            <div id="chapter-char-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+            <!-- 灵感碎片→人物卡（新增） -->
+            <div class="card-item" style="margin-bottom:14px;border:1px solid var(--accent-soft);background:linear-gradient(180deg, rgba(59,130,246,0.04), transparent);padding:10px 12px;border-radius:var(--radius)">
+              <div class="title-ink-md" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+                <span style="color:var(--accent)">💡 灵感碎片 → 多人物档案</span>
+                <button id="btn-character-inspiration-to-cards" class="btn-sm ai">🧠 灵感拆解生成</button>
+              </div>
+              <textarea id="character-inspiration-input" rows="3" placeholder="例：男主林远，一阶绿地维护工人，安静认命，泡泡有特殊瑕疵；女主苏澄，三阶力场基站调试员，温柔谦卑主动克制，不倨傲；配角小陈，二阶底层运维，不甘认命拼命想升阶；配角老周，一阶老摆烂，表面冷漠但心里仍有微光；配角刘姐，热心世俗的社区八卦阿姨……&#10;输入你对各人物的碎片想法，AI会自动拆解为完整人物档案（身份/阵营/性格/背景/执念/弱点/目标/定位8大字段）"
+                style="width:100%;padding:10px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:12px;line-height:1.65;resize:vertical;min-height:84px;font-family:var(--sans)"></textarea>
+            </div>
+
+            <!-- 全书人物档案 -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-top:8px;border-top:1px solid var(--border-soft)">
+              <span class="text-md text-muted" >全书人物档案</span>
+              <div class="flex-row-xs" >
+                <button id="btn-ai-gen-characters" style="padding:4px 10px;border:none;border-radius:4px;background:var(--accent);color:#fff;font-size:11px;cursor:pointer;font-weight:600">🤖 AI生成</button>
+                <button id="btn-add-character" style="padding:4px 10px;border:1px dashed var(--border);border-radius:4px;background:var(--surface);color:var(--muted);font-size:11px;cursor:pointer">+ 添加</button>
+                <button id="btn-clear-characters" style="padding:4px 10px;border:1px solid var(--border-soft);border-radius:4px;background:var(--bg);color:#c44;font-size:11px;cursor:pointer" title="清空所有人物">🗑 清空</button>
+              </div>
+            </div>
+            <div class="flex-col-md" id="character-list" ></div>
+          </div>
+        </div>
+        <div class="step-panel-nav">
+          <button class="step-nav-btn" onclick="goToStep(1)">← 上一步</button>
+          <div class="step-nav-spacer"></div>
+          <button class="step-nav-btn primary" onclick="goToStep(3)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- Step 5: Chapter Outline Panel -->
+      <div class="left-tab-content" data-step="5">
+        <div class="scroll-content">
+          <!-- 灵感碎片→章节大纲（统一风格） -->
+          <div class="card-item" style="margin:10px 12px 10px 12px;border:1px solid var(--accent-soft);background:linear-gradient(180deg, rgba(59,130,246,0.04), transparent);padding:10px 12px;border-radius:var(--radius)">
+            <div class="title-ink-md" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+              <span style="color:var(--accent)">💡 灵感碎片 → 章节大纲（3章结构化蓝图+连线框画布）</span>
+              <button id="btn-chapter-inspiration-to-outline" class="btn-sm ai">🧠 灵感拆解生成</button>
+            </div>
+            <textarea id="chapter-inspiration-input" rows="3" placeholder="例：3章短篇《雾港回声》。第1章 雨夜雾起码头，白葭返乡，码头重逢陆峋话不投机半张旧照，小满接人去糖水铺。第2章 阁楼翻旧档，老门卫夜访送糖水说出台词，锁定厂服人影。第3章 灯塔逼问，真相拆穿和解，江边坐一整夜雾散时丢草稿入江。&#10;把你对章节结构的碎片想法写下来，AI会自动拆解为：每章 intro/development/climax/ending4段结构蓝图 + 每章 scenes/信息揭示/伏笔 字段，写入 chapters.outline，同时自动生成 planning_cards 连线框画布（3章节点+承接连线）。"
+              style="width:100%;padding:10px 12px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:12px;line-height:1.65;resize:vertical;min-height:84px;font-family:var(--sans)"></textarea>
+          </div>
+          <div id="vol-nav-outline" class="vol-nav hidden"></div>
+          <div id="chapter-vol-outline-card" class="chapter-vol-outline-card hidden" >
+            <div class="cvoc-header">
+              <span class="cvoc-title" id="cvoc-vol-title"></span>
+              <button class="cvoc-toggle" onclick="toggleChapterVolOutlineCard()" title="折叠">−</button>
+            </div>
+            <div class="cvoc-body" id="cvoc-body">
+              <div class="cvoc-section">
+                <span class="cvoc-label">概要</span>
+                <p class="cvoc-text" id="cvoc-summary"></p>
+              </div>
+              <div class="cvoc-section">
+                <span class="cvoc-label">主题</span>
+                <p class="cvoc-text" id="cvoc-theme"></p>
+              </div>
+              <div class="cvoc-section" id="cvoc-keyevents-section">
+                <span class="cvoc-label">关键事件</span>
+                <ul class="cvoc-list" id="cvoc-keyevents"></ul>
+              </div>
+            </div>
+          </div>
+          <div id="chapter-selector-outline" class="chapter-selector-box">
+            <select id="chapter-dropdown-outline" class="chapter-dropdown" onchange="onChapterDropdownChange(this.value)"></select>
+          </div>
+          <div class="outline-view-switcher flex-center-xs-topbar" id="chapter-outline-view-switcher" >
+            <button class="covs-btn active btn-accent-md" data-view="edit" onclick="switchChapterOutlineView('edit')" >📝 编辑</button>
+            <button class="covs-btn" data-view="kanban" onclick="switchChapterOutlineView('kanban')">📌 看板</button>
+            <button class="covs-btn" data-view="matrix" onclick="switchChapterOutlineView('matrix')">📊 矩阵</button>
+            <button class="covs-btn" data-view="timeline" onclick="switchChapterOutlineView('timeline')">👥 时间线</button>
+          </div>
+          <div class="outline-editor" id="chapter-outline-editor"></div>
+          <!-- 伏笔摘要 -->
+          <div id="foreshadow-summary" style="margin:8px 12px;padding:8px 10px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer" onclick="openForeshadowDialog()">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span class="text-sm text-muted" >🔖 伏笔管理</span>
+              <span class="text-xs text-muted" id="foreshadow-count" >加载中…</span>
+            </div>
+          </div>
+        </div>
+        <div class="step-panel-nav">
+          <button class="step-nav-btn" onclick="goToStep(4)">← 上一步</button>
+          <div class="step-nav-spacer"></div>
+          <button class="step-nav-btn primary" onclick="goToStep(6)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- Step 7: Writing Panel -->
+      <div class="left-tab-content" data-step="7">
+        <div class="scroll-content">
+          <div id="vol-nav-writing" class="vol-nav"></div>
+          <div style="padding:6px 10px;text-align:center;border-bottom:1px solid var(--border-soft)">
+            <button id="btn-add-chapter" style="padding:4px 12px;border-radius:4px;border:1px dashed var(--border);background:var(--surface);color:var(--muted);font-size:12px;cursor:pointer;width:100%">+ 添加新章节</button>
+          </div>
+          <div class="row-muted-xs" >
+            当前章节：<strong class="text-ink" id="writing-current-ch" >第三章 · 归途</strong>
+          </div>
+        </div>
+        <div class="step-panel-nav justify-between" >
+          <button class="step-nav-btn" onclick="goToStep(6)">← 上一步</button>
+          <button class="step-nav-btn primary" onclick="document.getElementById('btn-ai-gen').click()">✨ AI生成正文</button>
+          <button class="step-nav-btn" onclick="goToStep(8)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- Step 8: 时间线 -->
+      <div class="left-tab-content" data-step="8">
+        <div class="scroll-content">
+          <div id="vol-nav-timeline" class="vol-nav"></div>
+          <div class="row-muted-xs" >
+            当前章节：<strong class="text-ink" id="timeline-current-ch" >第三章 · 归途</strong>
+          </div>
+        </div>
+        <div class="step-panel-nav justify-between" >
+          <button class="step-nav-btn" onclick="goToStep(7)">← 上一步</button>
+          <button class="step-nav-btn primary" onclick="document.getElementById('btn-timeline-compare-all-wide').click()"> 全部对照</button>
+          <button class="step-nav-btn" onclick="Timeline.finalizeChapter()" style="background:#16a34a;color:white;border-color:#16a34a;">定稿</button>
+        </div>
+      </div>
+
+      <!-- Step 6: 连线框（前置规划/后置对照双入口） -->
+      <div class="left-tab-content" data-step="6">
+        <div class="scroll-content">
+          <div class="row-muted-xs">🔲 连线框画布</div>
+          <div style="padding:8px 4px;font-size:12px;color:var(--muted);line-height:1.6">
+            梳理人物关系、伏笔链条、章节因果。<br>
+            写作前搭建逻辑网，写作后对照校验设定一致性。
+          </div>
+        </div>
+        <div class="step-panel-nav justify-between">
+          <button class="step-nav-btn" onclick="goToStep(5)">← 上一步</button>
+          <button class="step-nav-btn primary" onclick="WireframeCanvas.open('plan')">📐 布局连线框</button>
+          <button class="step-nav-btn" onclick="goToStep(7)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- Step 9: 草稿对照修改 + Gate定稿 -->
+      <div class="left-tab-content" data-step="9">
+        <div class="scroll-content">
+          <div class="row-muted-xs">📝 草稿对照修改 + 定稿</div>
+          <div style="padding:8px 4px;font-size:12px;color:var(--muted);line-height:1.6">
+            对照连线框设定逐段修正正文，联动C5 AI改写。<br>
+            完成后执行Gate最终校验并定稿。
+          </div>
+        </div>
+        <div class="step-panel-nav justify-between">
+          <button class="step-nav-btn" onclick="goToStep(8)">← 上一步</button>
+          <button class="step-nav-btn primary" onclick="WireframeCanvas.open('compare')">📋 连线框对照</button>
+          <button class="step-nav-btn" onclick="goToStep(7)">回写作 →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDITOR -->
+    <div class="editor-area">
+      <!-- 草稿对比面板（草稿模式下显示，嵌入编辑器区域内） -->
+      <div class="draft-compare-panel hidden" id="draft-compare-panel" >
+        <div class="compare-header">
+          <span class="compare-title">📝 草稿对比</span>
+          <span class="compare-stats" id="draft-compare-stats"></span>
+          <button class="compare-close-btn" onclick="DraftManager.closeCompare()" title="关闭对比面板">✕</button>
+        </div>
+        <div class="compare-body" id="draft-compare-body"></div>
+        <div class="compare-actions">
+          <button class="compare-btn compare-check" id="btn-draft-check" onclick="DraftManager.runCheck()" title="对当前草稿执行19维检查" style="background:#f59e0b;color:#fff">🔍 检查</button>
+          <button class="compare-btn compare-accept" onclick="DraftManager.accept()">✓ 采纳为成品</button>
+          <button class="compare-btn compare-edit" onclick="DraftManager.closeCompare()">✎ 继续编辑</button>
+          <button class="compare-btn compare-discard" onclick="DraftManager.discard()">✗ 丢弃草稿</button>
+        </div>
+      </div>
+      <!-- Writing Toolbar (visible in step 5) -->
+      <div class="writing-toolbar hidden" id="writing-toolbar" >
+        <div class="writing-toolbar-left hidden">
+          <button class="wt-btn" id="wt-btn-prev-ch" onclick="prevChapter()" title="上一章" style="font-size:14px;padding:2px 8px;margin-right:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;border-radius:4px">←</button><span class="wt-chapter-label" id="wt-chapter-label">第1章</span><button class="wt-btn" id="wt-btn-next-ch" onclick="nextChapter()" title="下一章" style="font-size:14px;padding:2px 8px;margin-left:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;border-radius:4px">→</button>
+          <button class="wt-btn" id="writing-ch-status" onclick="toggleChapterStatus()" title="切换章节状态" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer">📝 草稿</button>
+          <span class="wt-word-count" id="wt-word-count">0 字</span>
+        </div>
+        <div class="writing-toolbar-right">
+          <select id="model-selector" onchange="changeModel(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink);font-size:11px;max-width:120px">
+          <option value="auto">智能路由</option>
+          <option value="writing">写作模型</option>
+          <option value="check">检查模型</option>
+          <option value="summary">摘要模型</option>
+          <option value="chat">对话模型</option>
+        </select>
+        <script>
+          function changeModel(model) {
+            window._selectedModel = model;
+            showToast('切换模型: ' + model);
+          }
+          // Load available models from backend
+          (function() { try { if(typeof api==='function') api('/api/ai/task-models').then(function(d){if(d&&d.ok&&d.models){var sel=document.getElementById('model-selector');if(sel){var optKeys=['writing','check','summary','chat'];optKeys.forEach(function(k){if(d.models[k]){var o=sel.querySelector('option[value=\''+k+'\']');if(o)o.textContent=d.models[k].name||k;}});}}}).catch(function(){}); } catch(e){} })();
+        </script>
+<button class="wt-btn wt-gen" id="wt-btn-gen" title="AI生成当前章节正文">✨ 生成</button>
+          <button class="wt-btn" id="wt-btn-gen-all" title="一键生成全部章节正文（约5-10分钟）" style="background:linear-gradient(135deg,#4a90d9,#5cb85c);color:white">🚀 全部生成</button>
+          <button class="wt-btn" id="wt-btn-draft" title="进入草稿模式（对比成品与当前内容）" style="color:#f59e0b">📝 草稿</button>
+          <button class="wt-btn wt-opt text-red" id="wt-btn-opt" title="AI人类化改写（降低AI检测率）" >🔧 去AI味</button>
+          <button class="wt-btn text-red" id="wt-btn-opt-deep" title="深度去AI味：逐段反检测重写，自家检测达标也能继续，较慢（2-4分钟）耗Token">🧨 深度去AI</button>
+          <button class="wt-btn wt-cont" id="wt-btn-cont" title="AI续写当前章节">✍️ 续写</button>
+          <button class="wt-btn text-red" id="wt-btn-flavor" title="AI味检测（纯规则不耗Token）" >🔍 AI味</button>
+          <button class="wt-btn wt-save" id="wt-btn-save" title="保存当前章节">💾 保存</button>
+          <span class="divider-v" ></span>
+          <button class="wt-btn text-accent" id="wt-btn-brainstorm" onclick="openBrainstormPanel()" title="Canvas头脑风暴" >🧠 头脑风暴</button>
+          <button class="wt-btn text-accent" id="wt-btn-sensory" onclick="openSensoryPanel()" title="五感描写工具" >👁️ 五感</button>
+          <span ></span>
+          <button class="wt-btn divider-v text-orange" id="wt-btn-describe" onclick="openDescribePanel()" title="描写增强（感官/环境/人物/动作细节）" >📝 描写</button>
+          <button class="wt-btn text-orange" id="wt-btn-expand" onclick="openExpandPanel()" title="场景扩写（对话/心理/环境/动作/节奏）" >📏 扩写</button>
+          <button class="wt-btn text-orange" id="wt-btn-rewrite" onclick="openRewritePanel()" title="灵活重写（3个候选版本）" >🔄 重写</button>
+          <button class="wt-btn text-purple" id="wt-btn-feedback" onclick="openFeedbackPanel()" title="5维写作反馈（雷达图）" >💡 反馈</button>
+          <button class="wt-btn text-accent" id="wt-btn-plugins" onclick="togglePluginBar()" title="插件工具栏" >🧩 插件</button>
+          <span class="divider-v"></span>
+          <button class="wt-btn text-accent" id="wt-btn-planning" onclick="openPlanningPanel('grid')" title="规划视图：Grid拖拽排序/Matrix全景矩阵/Timeline时间线" 📐 规划</button>
+          <button class="wt-btn text-purple" id="wt-btn-wireframe" onclick="WireframeCanvas.open('plan')" title="连线框画布：设定可视化+正文对照校验">🔲 连线框</button>
+          <span class="divider-v"></span>
+          <button class="wt-btn divider-v text-purple" id="wt-btn-ai-analysis" onclick="openAIAnalysisPanel()" title="AI分析面板（7Gate检测/文风指纹/伏笔引力/线程分布）" >🔬 分析</button>
+          <button class="wt-btn" id="wt-btn-hooks" onclick="openHooksPanel()" title="伏笔管理" style="color:#f39c12">伏笔</button>
+          <button class="wt-btn text-orange" id="wt-btn-audit-log" onclick="openAuditLogPanel()" title="审计日志" 📋 日志</button>
+          <button class="wt-btn text-orange" id="wt-btn-distill" title="章节记忆蒸馏：压缩已写章节为结构化记忆单元" style="color:#16a085"> 蒸馏</button>
+          <button class="wt-btn text-red" id="wt-btn-ranking" onclick="openRankingPanel()" title="扫榜分析：起点榜单/市场趋势/创作建议" > 扫榜</button>
+          <span class="divider-v"></span>
+          <button class="wt-btn divider-v" id="wt-btn-add-ch" title="添加新章节" style="border:1px dashed var(--accent);color:var(--accent);font-weight:600">+ 新章节</button>
+        </div>
+      </div>
+      <div class="editor-scroll">
+        <!-- Writing Mode (Step 6) -->
+        <div class="editor-paper" id="editor-paper">
+          <h1 class="editor-title" id="editor-title">选择章节开始写作</h1>
+          <div class="editor-content" id="editor-content" contenteditable="true" spellcheck="false"></div>
+        </div>
+        <!-- C5 内联工具条：选中文字后浮现 -->
+        <div id="inline-toolbar" style="display:none;position:absolute;z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 16px rgba(0,0,0,0.3);padding:4px;gap:2px;display:none">
+          <button class="itool-btn" data-tool="describe" title="描写增强" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:12px;border-radius:3px;color:var(--ink)">📝</button>
+          <button class="itool-btn" data-tool="expand" title="场景扩写" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:12px;border-radius:3px;color:var(--ink)">📏</button>
+          <button class="itool-btn" data-tool="rewrite" title="灵活重写" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:12px;border-radius:3px;color:var(--ink)">🔄</button>
+          <button class="itool-btn" data-tool="feedback" title="5维反馈" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:12px;border-radius:3px;color:var(--ink)">💡</button>
+        </div>
+        <!-- Timeline Mode (Step 7) -->
+        <div class="timeline-full-editor hidden" id="timeline-full-editor" >
+          <div class="timeline-layout-wide">
+            <!-- 中间：偏离列表 -->
+            <div class="timeline-divergence-panel">
+              <div class="timeline-panel-header">
+                <span class="timeline-panel-title" id="timeline-panel-title-wide">选择章节查看偏离内容</span>
+                <span class="timeline-panel-subtitle" id="timeline-panel-subtitle-wide"></span>
+              </div>
+              <div class="timeline-panel-scroll">
+                <div id="timeline-detail-wide" class="timeline-detail">
+                  <div class="timeline-detail-placeholder">点击左侧章节查看详情</div>
+                </div>
+              </div>
+            </div>
+            <!-- 右侧：正文段落 -->
+            <div class="timeline-content-panel">
+              <div class="timeline-content-header">
+                <span class="timeline-content-title" id="timeline-content-title-wide">正文段落</span>
+              </div>
+              <div class="timeline-content-scroll">
+                <div id="timeline-content-area-wide" class="timeline-content-area">
+                  <div class="timeline-content-placeholder">点击左侧章节查看正文</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Detail Editor Mode (Steps 1-5) -->
+        <div class="detail-editor-panel" id="detail-editor-panel">
+          <div class="detail-editor-empty" id="detail-editor-empty">
+            <svg viewBox="0 0 24 24" width="48" height="48" style="stroke:currentColor;fill:none;stroke-width:1;stroke-linecap:round;stroke-linejoin:round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <div>点击左侧设定项或大纲项<br>在此处进行详细编辑</div>
+          </div>
+          <!-- 人物详情编辑面板（步骤2专用） -->
+          <div id="char-detail-panel" style="display:none;padding:24px 32px;width:100%;box-sizing:border-box;max-width:900px;margin:0 auto">
+            <div class="flex-between-gap-md" >
+              <div style="width:40px;height:40px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent)" id="char-detail-avatar">👤</div>
+              <div class="flex-1" >
+                <div class="heading-xl"  id="char-detail-title">选择人物</div>
+                <div class="text-md text-muted"  id="char-detail-subtitle">点击左侧人物卡片进行编辑</div>
+              </div>
+              <div class="flex-row-xs"  id="char-detail-actions"></div>
+            </div>
+            <div id="char-detail-form" style="display:flex;flex-direction:column;gap:16px"></div>
+          </div>
+          <!-- 分卷详情编辑面板（步骤4专用） -->
+          <div id="vol-detail-panel" style="display:none;padding:24px 32px;width:100%;box-sizing:border-box;max-width:900px;margin:0 auto">
+            <div class="flex-between-gap-md" >
+              <div style="width:40px;height:40px;border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent)">📚</div>
+              <div class="flex-1" >
+                <div class="heading-xl"  id="vol-detail-title">选择卷</div>
+                <div class="text-md text-muted"  id="vol-detail-subtitle">点击左侧卷进行编辑</div>
+              </div>
+              <div class="flex-row-xs" >
+                <button onclick="aiGenerateThisVolumeOutline()" style="padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:12px;cursor:pointer;font-weight:600">🤖 AI生成</button>
+                <button onclick="saveVolumeDetail()" style="padding:6px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--accent);font-size:12px;cursor:pointer;font-weight:600">💾 保存</button>
+              </div>
+            </div>
+            <div class="empty-state-lg" id="vol-detail-empty" >
+              点击左侧卷以编辑纲要
+            </div>
+            <div id="vol-detail-form" style="display:none;flex-direction:column;gap:16px">
+              <!-- 灵感碎片 -->
+              <div style="padding:12px;border:1px dashed var(--accent);border-radius:8px;background:var(--surface)">
+                <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:6px">💡 灵感碎片 → 本卷纲要</div>
+                <textarea id="vdetail-inspiration" placeholder="在这里写下你对本卷的想法、剧情走向、关键情节…&#10;例如：主角进入秘境修炼，结识重要伙伴，获得关键宝物…&#10;AI会分析你的想法，结合世界观和全书大纲生成完整的分卷大纲" style="width:100%;min-height:80px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink);font-size:12px;font-family:var(--sans);resize:vertical;box-sizing:border-box"></textarea>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <button onclick="inspirationToVolumeOutline()" style="padding:4px 12px;border:none;border-radius:4px;background:var(--accent);color:#fff;font-size:11px;cursor:pointer;font-weight:600">🧠 灵感→纲要</button>
+                  <button onclick="document.getElementById('vdetail-inspiration').value=''" style="padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--muted);font-size:11px;cursor:pointer">🗑 清空</button>
+                </div>
+              </div>
+              <!-- 卷标题 -->
+              <div>
+                <label class="label-muted-md-semibold" >卷标题</label>
+                <input type="text" id="vdetail-title" placeholder="卷标题" style="width:100%;padding:10px 12px;font-size:15px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--font);box-sizing:border-box">
+              </div>
+              <!-- 卷主题 -->
+              <div>
+                <label class="label-muted-md-semibold" >卷主题</label>
+                <input type="text" id="vdetail-theme" placeholder="本卷的核心主题" style="width:100%;padding:8px 12px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--font);box-sizing:border-box">
+              </div>
+              <!-- 卷概要 -->
+              <div>
+                <label class="label-muted-md-semibold" 卷概要</label>
+                <textarea id="vdetail-summary" placeholder="本卷的故事概要…" style="width:100%;min-height:140px;padding:8px 12px;font-size:13px;line-height:1.7;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--font);font-family:var(--sans);resize:vertical;box-sizing:border-box"></textarea>
+              </div>
+              <!-- 章节列表 -->
+              <div>
+                <div class="flex-between-mb8" >
+                  <span class="text-md text-muted font-semibold" >章节列表</span>
+                  <button class="btn-accent-dashed" onclick="addChapterToVolume()" >+ 添加章节</button>
+                </div>
+                <div id="vdetail-chapters" style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border-soft);border-radius:6px;background:var(--surface);min-height:60px"></div>
+              </div>
+              <!-- 关键事件 -->
+              <div>
+                <div class="flex-between-mb8" >
+                  <span >关键事件</span>
+                  <button class="btn-accent-dashed text-md text-muted font-semibold" onclick="addVolDetailKeyEvent()" >+ 添加</button>
+                </div>
+                <div class="flex-col-sm" id="vdetail-key-events" ></div>
+              </div>
+              <!-- 角色弧线 -->
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <span class="flex-between-mb8 text-md text-muted font-semibold" >角色弧线</span>
+                  <button onclick="addVolDetailCharArc()" style="font-size:11px;padding:3px 12px;border:1px dashed var(--border);border-radius:4px;background:var(--bg);color:var(--accent);cursor:pointer">+ 添加</button>
+                </div>
+                <div class="flex-col-sm" id="vdetail-char-arcs" ></div>
+              </div>
+            </div>
+          </div>
+          <div class="detail-editor-header hidden" id="detail-editor-header" >
+            <div>
+              <div class="detail-editor-title" id="detail-editor-title">标题</div>
+              <div class="detail-editor-subtitle" id="detail-editor-subtitle">类型</div>
+            </div>
+            <div class="detail-editor-actions">
+              <button onclick="aiGenDetailItem()" title="AI生成此项">🤖</button>
+              <button onclick="aiOptDetailItem()" title="AI优化此项">✨</button>
+              <button onclick="checkDetailItem()" title="检测此项">🔍</button>
+              <button class="primary" onclick="saveDetailItem()" title="保存此项">💾 保存</button>
+            </div>
+          </div>
+          <textarea class="detail-editor-textarea hidden" id="detail-editor-textarea"  placeholder="在此编辑内容..."></textarea>
+          <!-- 多字段表单容器 -->
+          <div id="detail-editor-form" class="detail-editor-form hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT DRAWER -->
+    <div class="right-drawer" id="right-drawer" style="position:relative">
+      <div class="right-tabs"><button class="right-tab-btn active" data-tab="memory">记忆</button></div>
+      <button class="right-drawer-close close-btn-xs" id="btn-close-right" >✕</button>
+      <div class="right-tab-content active" data-tab="memory">
+        <div class="mem-search"><svg class="mem-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" id="mem-search-input" placeholder="搜索设定、角色、事件…" autocomplete="off"></div>
+        <div id="memory-content">
+          <div class="mem-section-block" id="mem-block-context">
+            <div class="mem-block-header" onclick="toggleMemBlock('context')"><span class="mem-block-arrow">▼</span><span>本章即时</span><span class="mem-block-hint text-xs text-muted ml-auto" 角色·场景·建议</span></div>
+            <div class="mem-block-body" id="mem-block-body-context">
+              <div class="context-section"><h4>本章角色</h4><div id="context-chars">加载中...</div></div>
+              <div class="context-section"><h4>场景</h4><p id="context-scene">加载中...</p></div>
+              <div class="context-section"><h4>写作建议</h4><div class="ai-note" id="context-advice">加载中...</div></div>
+            </div>
+          </div>
+          <div class="mem-section-block" id="mem-block-ledger">
+            <div class="mem-block-header" onclick="toggleMemBlock('ledger')"><span class="mem-block-arrow">▼</span><span>全书记忆</span><span class="mem-block-hint text-xs text-muted ml-auto" 角色状态·伏笔·时间线</span></div>
+            <div class="mem-block-body" id="mem-block-body-ledger">
+              <div class="mem-arc"><h4>角色成长</h4><p style="color:var(--muted);font-size:12px;padding:8px;">加载中...</p></div>
+              <div style="padding:8px;text-align:center">
+                <button onclick="openDistillPanel()" style="padding:6px 14px;border:1px solid var(--accent);border-radius:4px;background:var(--accent-soft);color:var(--accent);font-size:11px;cursor:pointer;font-family:var(--sans)">👁️ 查看压缩记忆</button>
+              </div>
+            </div>
+          </div>
+          <div class="mem-section-block" id="mem-block-injection">
+            <div class="mem-block-header" onclick="toggleMemBlock('injection')"><span class="mem-block-arrow">▶</span><span>AI记忆注入预览</span><span class="mem-block-hint text-xs text-muted ml-auto" 点击展开</span></div>
+            <div class="mem-block-body hidden" id="mem-block-body-injection" >
+              <div class="hidden" id="mem-injection-content" style="padding:8px;font-size:12px;color:var(--muted)">点击下方按钮预览AI生成时将注入的记忆</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全书大纲-看板/矩阵 模态覆盖层 -->
+  <div class="overlay-fullscreen" id="novel-outline-overlay" >
+    <div class="topbar-inner" >
+      <span class="title-accent-xl" id="novel-overlay-title" ></span>
+      <span class="flex-1" ></span>
+      <button class="btn-ghost-md" onclick="switchNovelOutlineView('edit')">✕ 关闭</button>
+    </div>
+    <div class="panel-hidden-scroll-lg" id="novel-kanban-view" ></div>
+    <div class="panel-hidden-scroll-lg" id="novel-matrix-view" ></div>
+  </div>
+
+  <!-- 章节大纲-看板/矩阵/时间线 模态覆盖层 -->
+  <div class="overlay-fullscreen" id="chapter-outline-overlay" >
+    <div class="topbar-inner" >
+      <span class="title-accent-xl" id="chapter-overlay-title" ></span>
+      <span class="flex-1" ></span>
+      <button class="btn-ghost-md" onclick="switchChapterOutlineView('edit')">✕ 关闭</button>
+    </div>
+    <div class="panel-hidden-scroll-lg" id="chapter-kanban-view" ></div>
+    <div class="panel-hidden-scroll-lg" id="chapter-matrix-view"></div>
+    <div class="panel-hidden-scroll-lg" id="chapter-timeline-view" ></div>
+  </div>
+
+  <!-- 规划可视化 模态覆盖层 (Grid拖拽 / Matrix矩阵 / Timeline时间线) -->
+  <div class="overlay-fullscreen" id="planning-overlay" >
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+      <span class="topbar-inner overlay-fullscreen" style="font-size:16px;font-weight:700;color:var(--accent);font-family:var(--display)">📐 规划视图</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:4px">章节拖拽排序 / 全景矩阵 / 角色伏笔时间线</span>
+      <span class="flex-1" ></span>
+      <!-- 视图切换标签页 -->
+      <button class="planning-tab-btn active" data-view="grid" onclick="switchPlanningView('grid')" style="padding:5px 14px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:4px 4px 0 0;font-size:12px;cursor:pointer;font-family:var(--sans);font-weight:600">⊞ Grid</button>
+      <button class="planning-tab-btn tab-top-btn" data-view="matrix" onclick="switchPlanningView('matrix')" >▦ Matrix</button>
+      <button class="planning-tab-btn tab-top-btn" data-view="timeline" onclick="switchPlanningView('timeline')" >⏱ Timeline</button>
+      <span style="width:1px;height:20px;background:var(--border-soft);margin:0 6px"></span>
+      <button class="btn-ghost-md" onclick="closePlanningPanel()">✕ 关闭</button>
+    </div>
+    <!-- Grid 视图：拖拽排序卡片 -->
+    <div id="planning-grid-view" style="flex:1;overflow:auto;padding:20px;max-width:1400px;margin:0 auto;width:100%"></div>
+    <!-- Matrix 视图：全景矩阵表格 -->
+    <div class="panel-hidden-scroll-max" id="planning-matrix-view" ></div>
+    <!-- Timeline 视图：角色×伏笔时间线 -->
+    <div id="planning-timeline-view" ></div>
+  </div>
+  <div class="bottombar">
+    <div class="bottombar-left">
+      <span class="stat"><svg class="svg-icon-1.8" viewBox="0 0 24 24" width="14" height="14" ><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> <strong id="word-count">2,105</strong> 字</span>
+      <span class="stat sep"></span>
+      <span class="drift-indicator ok" id="drift-badge"><svg viewBox="0 0 24 24" width="12" height="12" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg> 无偏差</span>
+    </div>
+    <div class="bottombar-right svg-icon-2">
+      <div class="font-size-ctrl">
+        <span class="fs-label">Aa</span>
+        <button class="fs-btn" onclick="changeFontScale(-0.1)" title="缩小字号">-</button>
+        <input type="range" class="fs-slider" min="0.8" max="1.5" step="0.05" value="1.0" id="fs-slider" oninput="setFontScale(this.value)" title="字号缩放">
+        <button class="fs-btn" onclick="changeFontScale(0.1)" title="放大字号">+</button>
+        <span class="fs-val" id="fs-val">100%</span>
+        <button class="fs-reset" onclick="setFontScale(1.0)" title="重置">重置</button>
+      </div>
+      <button class="btn-theme" id="btn-theme" title="切换主题"><svg viewBox="0 0 24 24" width="14" height="14" ><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+      <div class="btn-undo-redo svg-icon-1.8">
+        <button class="icon-btn" id="btn-undo" title="撤销 Ctrl+Z"><svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9H3"/></svg></button>
+        <button class="icon-btn" id="btn-redo" title="重做 Ctrl+Y"><svg viewBox="0 0 24 24"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9h9"/></svg></button>
+      </div>
+      <button class="btn-focus" id="btn-focus">⚡ 专注模式</button>
+      <span class="bottombar-sep"></span>
+      <div class="ai-toolbar" id="ai-toolbar">
+        <button class="btn-ai" id="btn-ai-gen" title="AI生成章节">✨ 生成</button>
+        <button class="btn-ai" id="btn-ai-regen" title="重新生成当前章节（覆盖现有内容）" style="border-color:rgba(230,126,34,0.4);color:#e67e22">🔄 重新生成</button>
+        <button class="btn-ai" id="btn-ai-format" title="智能排版：自动分段、首行缩进" style="border-color:rgba(155,89,182,0.4);color:#9b59b6">📐 排版</button>
+        <span class="bottombar-sep"></span>
+        <button class="btn-ai" id="wt-btn-diagnosis" onclick="runFullDiagnosis()" title="全书优化诊断" style="border-color:rgba(46,204,113,0.4);color:#2ecc71">诊断</button>
+      </div>
+      <button class="btn-save" id="btn-save">💾 保存</button>
+      <button class="btn-ai" id="btn-chapter-lock" title="暂锁当前章节草稿，触发时间线生成与AI对照检查。检查通过后方可继续下一章" style="border-color:rgba(108,92,231,0.4);color:#6c5ce7;background:rgba(108,92,231,0.05)">🔒 暂锁草稿</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 阅读器覆盖层 -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="reader-overlay" id="reader-overlay">
+  <!-- 阅读器顶栏 -->
+  <div class="reader-topbar">
+    <div class="reader-topbar-left">
+      <button class="reader-icon-btn" id="reader-close-btn" title="退出阅读">←</button>
+      <div class="reader-topbar-titles">
+        <div class="reader-topbar-project" id="reader-project-title"></div>
+        <div class="reader-topbar-chapter" id="reader-chapter-title"></div>
+      </div>
+    </div>
+    <div class="reader-topbar-right">
+      <button class="reader-icon-btn" id="reader-bookshelf-btn" title="书架">📚</button>
+      <button class="reader-icon-btn" id="reader-toc-btn" title="目录">☰</button>
+      <button class="reader-icon-btn" id="reader-settings-btn" title="设置">⚙</button>
+    </div>
+  </div>
+  
+  <!-- 阅读滚动区 -->
+  <div class="reader-scroll" id="reader-scroll">
+    <div class="reader-paper">
+      <h2 class="reader-chapter-heading" id="reader-chapter-title-display"></h2>
+      <div class="reader-content" id="reader-content"></div>
+      <div class="reader-nav-bottom">
+        <button class="reader-nav-btn" id="reader-prev-btn">上一章</button>
+        <span class="reader-chapter-info" id="reader-chapter-info"></span>
+        <button class="reader-nav-btn" id="reader-next-btn">下一章</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 章节目录面板 -->
+  <div class="reader-side-panel" id="reader-chapter-panel">
+    <div class="reader-side-content">
+      <div class="reader-side-header">
+        <span>目录</span>
+        <button class="reader-icon-btn" id="reader-chapter-close">✕</button>
+      </div>
+      <div class="reader-chapter-list" id="reader-chapter-list"></div>
+    </div>
+  </div>
+  
+  <!-- 设置面板 -->
+  <div class="reader-side-panel" id="reader-settings-panel">
+    <div class="reader-side-content">
+      <div class="reader-side-header">
+        <span>阅读设置</span>
+        <button class="reader-icon-btn" id="reader-settings-close">✕</button>
+      </div>
+      <div class="reader-settings-body">
+        <div class="reader-setting-row">
+          <label>字号</label>
+          <div class="reader-setting-ctrl">
+            <button class="reader-step-btn" id="reader-fontsize-minus">A-</button>
+            <span class="reader-setting-val" id="reader-fontsize-val">18</span>
+            <button class="reader-step-btn" id="reader-fontsize-plus">A+</button>
+          </div>
+        </div>
+        <div class="reader-setting-row">
+          <label>行距</label>
+          <div class="reader-setting-ctrl">
+            <button class="reader-step-btn" id="reader-lineheight-minus">−</button>
+            <span class="reader-setting-val" id="reader-lineheight-val">1.8</span>
+            <button class="reader-step-btn" id="reader-lineheight-plus">+</button>
+          </div>
+        </div>
+        <div class="reader-setting-row">
+          <label>主题</label>
+          <div class="reader-setting-ctrl">
+            <button class="reader-theme-btn active" data-theme="day">日间</button>
+            <button class="reader-theme-btn" data-theme="sepia">护眼</button>
+            <button class="reader-theme-btn" data-theme="night">夜间</button>
+          </div>
+        </div>
+        <div class="reader-setting-row">
+          <label>字体</label>
+          <div class="reader-setting-ctrl">
+            <button class="reader-font-btn active" data-font="system">默认</button>
+            <button class="reader-font-btn" data-font="serif">衬线</button>
+            <button class="reader-font-btn" data-font="sans">无衬线</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 书架覆盖层 -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="bookshelf-overlay" id="bookshelf-overlay">
+  <div class="bookshelf-topbar">
+    <button class="reader-icon-btn" id="bookshelf-close-btn">←</button>
+    <span class="bookshelf-title">书架</span>
+    <button class="bookshelf-new-btn" id="bookshelf-new-btn">＋ 开新书</button>
+  </div>
+  <div class="bookshelf-tabs">
+    <button class="bookshelf-tab active" data-filter="all">全部</button>
+    <button class="bookshelf-tab" data-filter="favorite">收藏</button>
+  </div>
+  <div class="bookshelf-content">
+    <div class="bookshelf-list" id="bookshelf-list"></div>
+  </div>
+</div>
+
+<!-- 自定义对话框组件（替代原生 prompt/confirm） -->
+<div class="overlay-backdrop" id="custom-dialog-overlay">
+  <div class="custom-dialog">
+    <div class="custom-dialog-header">
+      <h3 id="custom-dialog-title">提示</h3>
+    </div>
+    <div class="custom-dialog-body">
+      <p id="custom-dialog-message" style="font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:12px;display:none"></p>
+      <input type="text" id="custom-dialog-input" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;font-family:var(--sans);outline:none;display:none" placeholder="">
+    </div>
+    <div class="custom-dialog-footer">
+      <button class="btn-sm reject" id="custom-dialog-cancel">取消</button>
+      <button class="btn-sm accept" id="custom-dialog-ok">确定</button>
+    </div>
+  </div>
+</div>
+<script>
+// 自定义对话框函数（替代原生 prompt/confirm）
+function customPrompt(title, defaultValue, callback) {
+  var overlay = document.getElementById('custom-dialog-overlay');
+  var titleEl = document.getElementById('custom-dialog-title');
+  var msgEl = document.getElementById('custom-dialog-message');
+  var inputEl = document.getElementById('custom-dialog-input');
+  var okBtn = document.getElementById('custom-dialog-ok');
+  var cancelBtn = document.getElementById('custom-dialog-cancel');
+  titleEl.textContent = title || '请输入';
+  msgEl.style.display = 'none';
+  inputEl.style.display = 'block';
+  inputEl.value = defaultValue || '';
+  inputEl.placeholder = '请输入...';
+  overlay.classList.add('active');
+  setTimeout(function() { inputEl.focus(); inputEl.select(); }, 50);
+  var cleanup = function() {
+    overlay.classList.remove('active');
+    okBtn.onclick = null;
+    cancelBtn.onclick = null;
+    inputEl.onkeydown = null;
+  };
+  okBtn.onclick = function() {
+    var val = inputEl.value;
+    cleanup();
+    if (callback) callback(val);
+  };
+  cancelBtn.onclick = function() {
+    cleanup();
+    if (callback) callback(null);
+  };
+  inputEl.onkeydown = function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); okBtn.click(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelBtn.click(); }
+  };
+}
+function customConfirm(message, callback) {
+  var overlay = document.getElementById('custom-dialog-overlay');
+  var titleEl = document.getElementById('custom-dialog-title');
+  var msgEl = document.getElementById('custom-dialog-message');
+  var inputEl = document.getElementById('custom-dialog-input');
+  var okBtn = document.getElementById('custom-dialog-ok');
+  var cancelBtn = document.getElementById('custom-dialog-cancel');
+  titleEl.textContent = '确认操作';
+  msgEl.style.display = 'block';
+  msgEl.textContent = message;
+  inputEl.style.display = 'none';
+  overlay.classList.add('active');
+  setTimeout(function() { okBtn.focus(); }, 50);
+  var cleanup = function() {
+    overlay.classList.remove('active');
+    okBtn.onclick = null;
+    cancelBtn.onclick = null;
+  };
+  okBtn.onclick = function() {
+    cleanup();
+    if (callback) callback(true);
+  };
+  cancelBtn.onclick = function() {
+    cleanup();
+    if (callback) callback(false);
+  };
+}
+</script>
+
+<!-- 新建项目对话框 -->
+<div class="overlay-backdrop" id="new-project-overlay">
+  <div class="suggestion-panel" style="width:400px">
+    <div class="suggestion-panel-header">
+      <h3>新建小说</h3>
+      <button class="icon-btn text-muted" id="new-project-close" >✕</button>
+    </div>
+    <div class="suggestion-panel-body">
+      <div class="mb-4" >
+        <label class="label-muted-sm" >小说标题</label>
+        <input type="text" id="new-project-title" placeholder="输入小说标题" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:14px;font-family:var(--display);outline:none">
+      </div>
+      <div class="mb-4" >
+        <label >小说题材</label>
+        <select class="input-full-lg label-muted-sm" id="new-project-genre" >
+          <option>玄幻</option>
+          <option selected>都市</option>
+          <option>悬疑</option>
+          <option>科幻</option>
+          <option>古言</option>
+          <option>克苏鲁</option>
+          <option>赛博朋克</option>
+          <option>末世</option>
+          <option>无限流</option>
+          <option>种田文</option>
+          <option>轻小说</option>
+          <option>其他</option>
+        </select>
+      </div>
+      <div class="mb-4" >
+        <label class="label-muted-sm" 章节数量</label>
+        <select class="input-full-lg label-muted-sm" id="new-project-length"  onchange="var ci=document.getElementById('new-project-custom-input');if(this.value==='custom'){ci.style.display='block';ci.focus();}else{ci.style.display='none';}">
+          <option value="5">短篇 · 5章</option>
+          <option value="10">短篇 · 10章</option>
+          <option value="20">中篇 · 20章</option>
+          <option value="50">中篇 · 50章</option>
+          <option value="100">长篇 · 100章</option>
+          <option value="custom">自定义</option>
+        </select>
+        <input type="number" id="new-project-custom-input" min="3" max="500" value="5" placeholder="输入章节数 (3-500)" style="display:none;width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;font-family:var(--sans);outline:none;margin-top:8px">
+      </div>
+    </div>
+    <div class="suggestion-panel-footer">
+      <button class="btn-sm reject" id="new-project-cancel">取消</button>
+      <button class="btn-sm accept" id="new-project-create">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Model Config Popover -->
+<div class="model-popover" id="model-popover">
+  <div class="mp-sec">
+    <h4>AI 服务商</h4>
+    <div class="mp-tabs" id="mp-tabs">
+      <button class="mp-tab active" data-provider="deepseek" onclick="switchModelProvider('deepseek')">DeepSeek V4</button>
+      <button class="mp-tab" data-provider="ollama" onclick="switchModelProvider('ollama')">Ollama</button>
+      <button class="mp-tab" data-provider="openai" onclick="switchModelProvider('openai')">OpenAI</button>
+      <button class="mp-tab" data-provider="doubao" onclick="switchModelProvider('doubao')">豆包</button>
+      <button class="mp-tab" data-provider="kimi" onclick="switchModelProvider('kimi')">Kimi</button>
+    </div>
+    <div id="mp-deepseek-panel">
+      <input class="mp-select" id="mp-api-key" type="password" placeholder="API 密钥 (sk-...)" onchange="saveModelConfig()">
+      <input class="mp-select" id="mp-endpoint" value="https://api.deepseek.com" placeholder="接口地址" onchange="saveModelConfig()">
+      <select class="mp-select" id="mp-model-name" onchange="saveModelConfig()">
+        <option value="deepseek-v4-flash">DeepSeek V4 Flash（快速）</option>
+        <option value="deepseek-v4-pro">DeepSeek V4 Pro（强大）</option>
+      </select>
+      <div class="info-block-xs" >
+        💡 获取密钥：访问 <a class="text-accent" href="https://platform.deepseek.com/api_keys" target="_blank" >platform.deepseek.com</a> 注册后在API Keys页面创建<br>
+        新用户有免费额度，无需充值即可使用
+      </div>
+    </div>
+    <div class="hidden" id="mp-ollama-panel" >
+      <input class="mp-select hidden" id="mp-ollama-host" value="http://localhost:11434" placeholder="Ollama 主机地址" onchange="saveModelConfig()">
+      <input class="mp-select" id="mp-ollama-model" value="qwen2.5:14b" placeholder="模型名称（如 qwen2.5:14b）" onchange="saveModelConfig()">
+      <div class="info-block-xs" >
+        💡 需先安装 <a class="text-accent" href="https://ollama.com/download" target="_blank" Ollama</a>，然后在命令行执行：<br class="text-accent">
+        <code style="background:var(--surface);padding:1px 4px;border-radius:2px">ollama pull qwen2.5:14b</code>
+      </div>
+    </div>
+    <div class="hidden" id="mp-openai-panel" >
+      <input class="mp-select" id="mp-openai-key" type="password" placeholder="API 密钥 (sk-...)" onchange="saveModelConfig()">
+      <input class="mp-select" id="mp-openai-endpoint" value="https://api.openai.com/v1" placeholder="接口地址（兼容通义千问/Kimi等）" onchange="saveModelConfig()">
+      <input class="mp-select" id="mp-openai-model" value="gpt-4o-mini" placeholder="模型名称" onchange="saveModelConfig()">
+    </div>
+    <div class="hidden" id="mp-doubao-panel" >
+      <input class="mp-select" id="mp-doubao-key" type="password" placeholder="API 密钥 (火山方舟 Key)" onchange="saveModelConfig()">
+      <input class="mp-select" id="mp-doubao-endpoint" value="https://ark.cn-beijing.volces.com/api/v3" placeholder="接口地址（火山方舟 API）" onchange="saveModelConfig()">
+      <select class="mp-select" id="mp-doubao-model" onchange="saveModelConfig()">
+        <option value="doubao-seed-2.0-pro">豆包 Seed 2.0 Pro（文笔最佳）</option>
+        <option value="doubao-seed-1.8">豆包 Seed 1.8（性价比）</option>
+        <option value="doubao-2.1-pro">豆包 2.1 Pro（旗舰）</option>
+        <option value="doubao-pro-32k">豆包 Pro 32K（旧版兼容）</option>
+      </select>
+      <div class="info-block-xs" >
+        💡 获取密钥：火山引擎控制台 → Ark 大模型 → API Key 管理 → 创建密钥<br>
+        Seed 2.0 Pro 背靠番茄语料，正文文笔强，推荐用于正文写作
+      </div>
+    </div>
+    <div class="hidden" id="mp-kimi-panel" >
+      <input class="mp-select" id="mp-kimi-key" type="password" placeholder="API 密钥 (sk-...)" onchange="saveModelConfig()">
+      <input class="mp-select" id="mp-kimi-endpoint" value="https://api.moonshot.cn/v1" placeholder="接口地址（Moonshot API）" onchange="saveModelConfig()">
+      <select class="mp-select" id="mp-kimi-model" onchange="saveModelConfig()">
+        <option value="moonshot-v1-8k">Moonshot v1 8K（轻量）</option>
+        <option value="moonshot-v1-32k">Moonshot v1 32K（标准）</option>
+        <option value="moonshot-v1-128k">Moonshot v1 128K（长上下文）</option>
+      </select>
+      <div class="info-block-xs" >
+        💡 获取密钥：https://platform.moonshot.cn → 开发者中心 → API Key 管理<br>
+        Kimi 长上下文强，适合长文档分析，写小说文笔偏白
+      </div>
+    </div>
+    <div class="mp-sec" style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">
+      <h4>任务路由（多模型协作）</h4>
+      <div class="mp-row"><label>正文写作</label><select class="mp-select" id="mp-task-writing" onchange="saveModelConfig()"></select></div>
+      <div class="mp-row"><label>大纲架构</label><select class="mp-select" id="mp-task-architecture" onchange="saveModelConfig()"></select></div>
+      <div class="mp-row"><label>检查审稿</label><select class="mp-select" id="mp-task-check" onchange="saveModelConfig()"></select></div>
+      <div class="mp-row"><label>摘要提取</label><select class="mp-select" id="mp-task-summary" onchange="saveModelConfig()"></select></div>
+      <div class="mp-row"><label>对话问答</label><select class="mp-select" id="mp-task-chat" onchange="saveModelConfig()"></select></div>
+        <div class="info-block-xs" >
+        不同任务可指定不同服务商（如豆包写正文 + DeepSeek 查逻辑）。留空=跟随当前服务商；路由的服务商未填 Key 时自动回退当前服务商
+      </div>
+    </div>
+    <div class="mp-row"><label>创意温度</label><input type="range" min="0" max="2" step="0.1" value="0.7" id="mp-temp" oninput="document.getElementById('mp-temp-val').textContent=this.value;saveModelConfig()"><span class="mp-val" id="mp-temp-val">0.7</span></div>
+    <div class="mp-row"><label>最大字数</label><input type="number" min="500" max="10000" step="500" value="3000" id="mp-maxwords" onchange="saveModelConfig()"></div>
+    <button class="btn-save" id="mp-test-conn" style="width:100%;margin-top:8px">测试连接</button>
+    <div id="mp-conn-status"></div>
+  </div>
+  <div class="mp-sec" id="mp-usage-sec" style="border-top:1px solid var(--border);padding-top:8px">
+    <h4 style="display:flex;justify-content:space-between;align-items:center">用量统计 <button class="btn-sm" onclick="loadAIUsage(true)" style="font-size:11px;padding:2px 8px">刷新</button></h4>
+    <div id="mp-usage-body" style="font-size:12px;color:var(--ink)"><span style="opacity:0.5">点击刷新加载…</span></div>
+  </div>
+</div>
+
+<!-- First Launch Wizard -->
+<div class="overlay-backdrop hidden" id="wizard-overlay" >
+  <div class="hidden" style="position:relative;z-index:1001;width:90%;max-width:520px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 12px 48px rgba(0,0,0,0.5);overflow:hidden">
+    <div style="padding:24px 28px 8px;text-align:center">
+      <div style="font-size:48px;margin-bottom:8px">📚</div>
+      <h2 style="font-size:22px;color:var(--accent);margin:0">欢迎使用书斋</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:6px">AI驱动的中文网文创作工具 · 只需3步即可开始写作</p>
+    </div>
+    <div style="padding:16px 28px">
+      <div id="wizard-step1" style="display:block">
+        <div class="card-p4" >
+          <div class="title-accent-lg" >📝 第1步：选择AI服务（三选一）</div>
+          <div >
+            <label class="card-hover flex-col-md"  onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <input class="mt-075" type="radio" name="wizard-ai" value="deepseek" checked >
+              <div><strong class="text-base" >DeepSeek V4</strong> <span style="font-size:11px;color:var(--success)">推荐 · 新用户免费</span><div class="label-muted-inline-top-xs" >注册即送500万token，无需充值。适合大多数人。</div></div>
+            </label>
+            <label class="card-hover"  onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <input class="mt-075" type="radio" name="wizard-ai" value="ollama" >
+              <div><strong class="text-base" >Ollama 本地模型</strong> <span >完全离线</span><div class="label-muted-inline-top-xs text-sm text-muted" >需安装Ollama并下载模型，不联网也能用。适合有显卡的用户。</div></div>
+            </label>
+            <label class="card-hover"  onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <input class="mt-075" type="radio" name="wizard-ai" value="openai" >
+              <div><strong class="text-base" >OpenAI兼容接口</strong> <span class="text-sm text-muted" >通义千问/Kimi/GLM等</div></div>
+            </label>
+          </div>
+        </div>
+        <div class="card-p4" id="wizard-deepseek-config" >
+          <div class="title-accent-lg" >🔑 第2步：填写DeepSeek API密钥</div>
+          <input type="password" id="wizard-api-key" placeholder="粘贴你的 API Key (sk-...)" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;outline:none;margin-bottom:8px">
+          <div style="font-size:11px;color:var(--muted);line-height:1.6">
+            还没有密钥？<a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent);text-decoration:none">👉 点击这里注册获取</a><br>
+            ① 注册 DeepSeek 账号 ② 进入 API Keys 页面 ③ 点击创建密钥 ④ 复制粘贴到上方输入框
+          </div>
+        </div>
+        <div id="wizard-ollama-config" style="display:none;padding:16px;background:var(--surface);border-radius:var(--radius-sm);margin-bottom:12px">
+          <div style="font-size:14px;font-weight:600;color:var(--accent);margin-bottom:8px">🔑 第2步：确认Ollama配置</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">
+            确保已安装Ollama并拉取模型：<br>
+            <a class="text-accent" href="https://ollama.com/download" target="_blank" >下载Ollama</a> → 安装后打开命令行执行：<br>
+            <code style="background:var(--bg);padding:2px 6px;border-radius:3px">ollama pull qwen2.5:14b</code>
+          </div>
+        </div>
+        <div class="flex-row-sm" >
+          <button class="btn-sm flex-1" onclick="skipWizard()" >稍后配置，先看看</button>
+          <button class="btn-sm accept" onclick="completeWizard()" style="flex:2">完成配置，开始创作 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Project Picker Modal -->
+<div class="model-popover" id="project-picker" style="right:auto;left:50%;transform:translate(-50%,-6px);width:400px">
+  <div class="mp-sec">
+    <h4>打开项目</h4>
+    <div id="project-list-inner"></div>
+    <button class="btn-save" style="width:100%;margin-top:8px" onclick="document.getElementById('new-project-overlay').classList.add('active');document.getElementById('new-project-title').value='';document.getElementById('new-project-title').focus();document.getElementById('project-picker').classList.remove('active')">+ 新建项目</button>
+  </div>
+</div>
+
+<!-- Plugin Toolbar Bar (below writing toolbar) -->
+<div class="plugin-bar hidden" id="plugin-bar" >
+  <div class="plugin-bar-inner" id="plugin-bar-inner"></div>
+</div>
+
+<!-- Canvas Brainstorm Modal -->
+<div class="overlay-backdrop" id="brainstorm-overlay">
+  <div class="brainstorm-panel">
+    <div class="brainstorm-header">
+      <h3>🧠 Canvas 头脑风暴</h3>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="btn-sm" id="bs-view-toggle" onclick="toggleBsView()" title="切换视图模式" style="font-size:11px;padding:3px 8px">📊 图谱</button>
+        <button class="icon-btn text-muted" onclick="closeBrainstormPanel()" >✕</button>
+      </div>
+    </div>
+    <div class="brainstorm-controls">
+      <div class="bs-input-row">
+        <input type="text" id="bs-topic" placeholder="输入关注的主题（留空则基于当前章节）" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;font-family:var(--sans);outline:none">
+        <select id="bs-mode" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:12px;font-family:var(--sans);outline:none">
+          <option value="plot">情节方向</option>
+          <option value="character">角色发展</option>
+          <option value="conflict">冲突升级</option>
+          <option value="theme">主题深化</option>
+        </select>
+        <button class="btn-sm accept" id="bs-generate-btn" onclick="generateBrainstormIdeas()">生成创意</button>
+      </div>
+    </div>
+    <div class="brainstorm-canvas" id="brainstorm-canvas">
+      <div class="bs-empty-hint" id="bs-empty-hint">
+        <svg class="svg-faint" viewBox="0 0 24 24" width="48" height="48" ><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M8 12h8M12 8v8" stroke-linecap="round"/></svg>
+        <p>点击"生成创意"开始头脑风暴</p>
+        <p style="font-size:11px;opacity:0.6">AI将根据当前章节内容为你提供创意方向</p>
+      </div>
+    </div>
+    <div class="brainstorm-canvas" id="brainstorm-graph-canvas" style="display:none;position:relative;overflow:hidden">
+      <svg id="bs-graph-svg" width="100%" height="100%" style="display:block"></svg>
+      <div id="bs-graph-hint" style="position:absolute;top:8px;left:8px;font-size:11px;color:var(--muted);background:var(--surface);padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--border-soft)">
+        拖拽节点移动 | <span id="bs-connect-mode-text">点击"连线"进入连接模式</span>
+      </div>
+      <button class="btn-sm" id="bs-connect-toggle" onclick="toggleBsConnectMode()" style="position:absolute;top:8px;right:8px;font-size:11px;padding:3px 8px">🔗 连线</button>
+    </div>
+    <div class="brainstorm-footer">
+      <button class="btn-sm" onclick="clearBrainstormCanvas()">清空画板</button>
+      <span class="flex-1" ></span>
+      <span id="bs-card-count" style="font-size:11px;color:var(--muted);font-family:var(--mono)">0 张卡片</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ E 连线框画布 Overlay ═══ -->
+<div id="wf-overlay" class="wf-overlay">
+  <!-- 顶部工具栏 -->
+  <div class="wf-toolbar">
+    <div class="wf-toolbar-left">
+      <button class="wf-btn" data-wf-action="close" title="关闭">✕</button>
+      <span class="wf-title">🔲 连线框画布</span>
+      <span id="wf-check-badge" class="wf-badge" style="display:none">0</span>
+    </div>
+    <div class="wf-toolbar-center">
+      <button class="wf-btn" data-wf-action="new" title="新建节点">➕ 节点</button>
+      <button class="wf-btn" id="wf-connect-btn" data-wf-action="connect" title="连线模式">🔗 连线</button>
+      <button class="wf-btn text-blue" data-wf-action="auto-gen" title="从项目数据自动生成所有节点和连线">⚡ 自动生成</button>
+      <span class="wf-divider"></span>
+      <button class="wf-btn" data-wf-action="undo" title="撤销 (Ctrl+Z)">↩️</button>
+      <button class="wf-btn" data-wf-action="redo" title="重做 (Ctrl+Shift+Z)">↪️</button>
+      <span class="wf-divider"></span>
+      <button class="wf-btn" data-wf-action="zoom-in" title="放大">🔍+</button>
+      <button class="wf-btn" data-wf-action="zoom-out" title="缩小">🔍-</button>
+      <button class="wf-btn" data-wf-action="zoom-reset" title="重置缩放">🎯</button>
+      <span class="wf-divider"></span>
+      <button class="wf-btn" data-wf-action="export" title="导出SVG">📷</button>
+      <button class="wf-btn" data-wf-action="toggle-compare" title="正文对照开关">📖 对照</button>
+      <button class="wf-btn text-red" data-wf-action="check" title="全局不一致检测">⚠️ 检测</button>
+    </div>
+    <div class="wf-toolbar-right">
+      <span id="wf-status" style="font-size:11px;color:var(--muted);font-family:var(--mono)">节点:0 | 连线:0</span>
+    </div>
+  </div>
+
+  <!-- 主区域：左素材库 + 中画布 + 右对照面板 -->
+  <div class="wf-main">
+    <!-- 左侧素材库 -->
+    <div class="wf-asset-panel" id="wf-asset-panel">
+      <div class="wf-asset-header">📦 素材库<span style="font-size:10px;color:var(--muted)">拖拽到画布</span></div>
+      <div class="wf-asset-list" id="wf-asset-lib"></div>
+    </div>
+
+    <!-- 中间画布 -->
+    <div class="wf-canvas-wrap">
+      <svg id="wf-svg" class="wf-svg">
+        <defs>
+          <pattern id="wf-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#wf-grid)"/>
+        <g id="wf-canvas-group"></g>
+      </svg>
+    </div>
+
+    <!-- 右侧正文对照面板（compare模式） -->
+    <div class="wf-compare-panel" id="wf-compare-panel" style="display:none">
+      <div class="wf-compare-header">📖 正文对照</div>
+      <div class="wf-compare-content" id="wf-compare-content"></div>
+    </div>
+  </div>
+
+  <!-- 右键菜单 -->
+  <div id="wf-context-menu" class="wf-context-menu" style="display:none"></div>
+
+  <!-- 节点编辑器 -->
+  <div id="wf-node-editor" class="wf-modal" style="display:none">
+    <div class="wf-modal-content">
+      <div class="wf-modal-header">✏️ 编辑节点</div>
+      <div class="wf-modal-body">
+        <label class="wf-field"><span>类型</span>
+          <select id="wf-edit-type" class="wf-input">
+            <option value="free">自由</option>
+            <option value="character">人物</option>
+            <option value="foreshadow">伏笔</option>
+            <option value="chapter">章节</option>
+            <option value="worldview">世界观</option>
+          </select>
+        </label>
+        <label class="wf-field"><span>标题</span><input id="wf-edit-title" class="wf-input" placeholder="节点标题"></label>
+        <label class="wf-field"><span>摘要</span><textarea id="wf-edit-summary" class="wf-input" rows="2" placeholder="节点摘要（卡片显示）"></textarea></label>
+        <label class="wf-field"><span>关键引用</span><textarea id="wf-edit-quotes" class="wf-input" rows="3" placeholder="关键引用/原文片段"></textarea></label>
+        <label class="wf-field"><span>章节引用</span><input id="wf-edit-ref" class="wf-input" placeholder="如：第3章"></label>
+      </div>
+      <div class="wf-modal-footer">
+        <button class="wf-btn" data-wf-action="cancel-edit">取消</button>
+        <button class="wf-btn wf-btn-primary" data-wf-action="save-edit">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 首次教学 -->
+  <div id="wf-tutorial" class="wf-modal" style="display:none">
+    <div class="wf-modal-content" style="max-width:520px">
+      <div class="wf-modal-header">🎓 连线框使用指南</div>
+      <div class="wf-modal-body" style="font-size:13px;line-height:1.8">
+        <p><strong>四种新建节点方式：</strong></p>
+        <ul style="padding-left:20px;margin:4px 0">
+          <li>双击画布空白处</li>
+          <li>工具栏「➕ 节点」按钮</li>
+          <li>左侧素材库拖拽到画布</li>
+          <li>右键空白处→新建节点</li>
+        </ul>
+        <p><strong>连线：</strong>点击「🔗 连线」→先点起点节点→再点终点节点</p>
+        <p><strong>删除：</strong>选中节点/连线后按 Delete 键，或右键删除</p>
+        <p><strong>移动画布：</strong>空白处拖拽平移，滚轮缩放</p>
+        <p><strong>对照校验：</strong>对照模式下点「⚠️ 检测」自动校验设定一致性</p>
+      </div>
+      <div class="wf-modal-footer">
+        <label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="wf-tut-noshow"> 不再显示</label>
+        <button class="wf-btn wf-btn-primary" id="wf-tut-close">我知道了</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sensory Description Modal -->
+<div class="overlay-backdrop" id="sensory-overlay">
+  <div class="sensory-panel">
+    <div class="sensory-header">
+      <h3>👁️ 五感描写工具</h3>
+      <button class="icon-btn text-muted" onclick="closeSensoryPanel()" ✕</button>
+    </div>
+    <div class="sensory-controls text-muted">
+      <textarea id="sensory-scene" placeholder="描述场景（留空则使用当前章节内容）" style="width:100%;min-height:60px;max-height:100px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;font-family:var(--sans);outline:none;resize:vertical"></textarea>
+      <div class="sensory-options">
+        <div class="sensory-sense-tabs" id="sensory-sense-tabs">
+          <button class="sense-tab active" data-sense="all" onclick="selectSenseTab('all')">全部</button>
+          <button class="sense-tab" data-sense="visual" onclick="selectSenseTab('visual')">👁️ 视觉</button>
+          <button class="sense-tab" data-sense="auditory" onclick="selectSenseTab('auditory')">👂 听觉</button>
+          <button class="sense-tab" data-sense="olfactory" onclick="selectSenseTab('olfactory')">👃 嗅觉</button>
+          <button class="sense-tab" data-sense="tactile" onclick="selectSenseTab('tactile')">✋ 触觉</button>
+          <button class="sense-tab" data-sense="gustatory" onclick="selectSenseTab('gustatory')">👅 味觉</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="sensory-style" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:12px;font-family:var(--sans);outline:none">
+            <option value="immersive">沉浸式</option>
+            <option value="subtle">克制式</option>
+            <option value="poetic">诗意式</option>
+          </select>
+          <button class="btn-sm accept" id="sensory-gen-btn" onclick="generateSensoryDesc()">生成描写</button>
+        </div>
+      </div>
+    </div>
+    <div class="sensory-results" id="sensory-results">
+      <div class="sensory-empty" id="sensory-empty">
+        <svg class="svg-faint" viewBox="0 0 24 24" width="48" height="48" ><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.07 7.07l4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.07-7.07l4.24-4.24"/></svg>
+        <p>选择感官类型，点击"生成描写"</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== E 关系图可视化 ===== -->
+<div class="overlay-backdrop" id="graph-overlay" style="display:none;z-index:10001">
+  <div style="width:94%;max-width:900px;height:85vh;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.5)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-soft);background:var(--surface)">
+      <h3 style="margin:0;font-size:15px">🕸️ 角色关系图</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="graph-node-count" style="font-size:12px;color:var(--muted)"></span>
+        <button class="icon-btn text-muted" onclick="closeGraphView()">✕</button>
+      </div>
+    </div>
+    <div id="graph-tooltip" style="position:absolute;display:none;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;pointer-events:none;z-index:10002;max-width:280px;box-shadow:0 4px 12px rgba(0,0,0,0.3)"></div>
+    <div style="flex:1;overflow:hidden;position:relative" id="graph-svg-container">
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:14px" id="graph-loading">加载中…</div>
+    </div>
+    <div style="padding:8px 16px;border-top:1px solid var(--border-soft);background:var(--surface);display:flex;gap:12px;flex-wrap:wrap;font-size:11px;align-items:center">
+      <span style="color:var(--muted)">关系类型:</span>
+      <span style="color:#e74c3c">━ 敌对/冲突</span>
+      <span style="color:#2ecc71">━ 合作/友好</span>
+      <span style="color:#3498db">━ 师徒/层级</span>
+      <span style="color:#9b59b6">━ 利益/利用</span>
+      <span style="color:#f39c12">━ 情感/亲密</span>
+      <span style="color:#95a5a6">━ 其他</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== C4 章节预览确认对话框 ===== -->
+<div class="overlay-backdrop" id="chapter-preview-overlay" style="display:none;z-index:10001">
+  <div style="width:92%;max-width:780px;max-height:88vh;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.5)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-soft);background:var(--surface)">
+      <h3 style="margin:0;font-size:15px">📋 章节预览确认</h3>
+      <button class="icon-btn text-muted" onclick="closeChapterPreview()">✕</button>
+    </div>
+    <div id="chapter-preview-assessment" style="padding:8px 16px;border-bottom:1px solid var(--border-soft);font-size:12px;display:none"></div>
+    <div id="chapter-preview-content" style="flex:1;overflow-y:auto;padding:16px 20px;font-size:14px;line-height:1.8;white-space:pre-wrap;color:var(--ink)"></div>
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border-soft);background:var(--surface);justify-content:space-between;align-items:center">
+      <span id="chapter-preview-meta" style="font-size:12px;color:var(--muted)"></span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" onclick="closeChapterPreview()" style="padding:6px 16px">重新生成</button>
+        <button class="btn-sm accept" onclick="confirmPreviewChapter()" style="padding:6px 20px;font-weight:600">✓ 确认采用</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Creative Tools Overlays (Describe / Expand / Rewrite / Feedback) ===== -->
+
+<!-- Describe Panel -->
+<div class="overlay-backdrop" id="describe-overlay">
+  <div class="creative-panel">
+    <div class="creative-header">
+      <h3>📝 描写增强</h3>
+      <button class="icon-btn text-muted" onclick="closeDescribePanel()" >✕</button>
+    </div>
+    <div class="creative-controls">
+      <div class="ct-preview-box">
+        <div class="ct-preview-label">选中文本</div>
+        <div class="ct-preview-text" id="describe-text-preview"></div>
+      </div>
+      <div class="ct-option-group">
+        <div class="ct-option-label">增强类型</div>
+        <div class="ct-radio-grid">
+          <label class="ct-radio-card"><input type="radio" name="describe-type" value="sensory" checked><span class="ct-radio-icon">👁️</span><span class="ct-radio-text">感官细节<br><small>视觉/听觉/嗅觉/触觉/味觉</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="describe-type" value="environment"><span class="ct-radio-icon">🌤️</span><span class="ct-radio-text">环境氛围<br><small>天气/光影/温度/气味</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="describe-type" value="character"><span class="ct-radio-icon">👤</span><span class="ct-radio-text">人物外貌<br><small>穿着/表情/小动作</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="describe-type" value="action"><span class="ct-radio-icon">⚡</span><span class="ct-radio-text">动作细节<br><small>武术/日常/微表情</small></span></label>
+        </div>
+      </div>
+      <div class="text-right" >
+        <button class="btn-sm accept" id="describe-run-btn" onclick="runDescribe()">开始增强</button>
+      </div>
+    </div>
+    <div class="creative-results" id="describe-results">
+      <div class="ct-empty"><p>选择增强类型，点击"开始增强"</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Expand Panel -->
+<div class="overlay-backdrop" id="expand-overlay">
+  <div class="creative-panel">
+    <div class="creative-header">
+      <h3>📏 场景扩写</h3>
+      <button class="icon-btn text-muted" onclick="closeExpandPanel()" ✕</button>
+    </div>
+    <div class="creative-controls text-muted">
+      <div class="ct-preview-box">
+        <div class="ct-preview-label">选中文本</div>
+        <div class="ct-preview-text" id="expand-text-preview"></div>
+      </div>
+      <div class="ct-option-group">
+        <div class="ct-option-label">扩写方向</div>
+        <div class="ct-radio-grid">
+          <label class="ct-radio-card"><input type="radio" name="expand-direction" value="dialogue" checked><span class="ct-radio-icon">💬</span><span class="ct-radio-text">增加对话<br><small>补充角色互动</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="expand-direction" value="psychology"><span class="ct-radio-icon">🧠</span><span class="ct-radio-text">心理描写<br><small>内心独白</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="expand-direction" value="environment"><span class="ct-radio-icon">🌲</span><span class="ct-radio-text">环境描写<br><small>场景烘托</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="expand-direction" value="action"><span class="ct-radio-icon">⚔️</span><span class="ct-radio-text">动作描写<br><small>打斗细节</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="expand-direction" value="slow"><span class="ct-radio-icon">🐌</span><span class="ct-radio-text">放慢节奏<br><small>展开时间线</small></span></label>
+        </div>
+      </div>
+      <div class="ct-option-group">
+        <div class="ct-option-label">目标字数倍数</div>
+        <div class="ct-multiplier-row">
+          <select id="expand-multiplier" class="ct-select">
+            <option value="1.5">1.5 倍</option>
+            <option value="2" selected>2 倍</option>
+            <option value="3">3 倍</option>
+          </select>
+        </div>
+      </div>
+      <div >
+        <button class="btn-sm accept text-right" id="expand-run-btn" onclick="runExpand()">开始扩写</button>
+      </div>
+    </div>
+    <div class="creative-results" id="expand-results">
+      <div class="ct-empty"><p>选择扩写方向和倍数，点击"开始扩写"</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Rewrite Panel -->
+<div class="overlay-backdrop" id="rewrite-overlay">
+  <div class="creative-panel">
+    <div class="creative-header">
+      <h3>🔄 灵活重写</h3>
+      <button class="icon-btn text-muted" onclick="closeRewritePanel()" >✕</button>
+    </div>
+    <div class="creative-controls">
+      <div class="ct-preview-box">
+        <div class="ct-preview-label">选中文本</div>
+        <div class="ct-preview-text" id="rewrite-text-preview"></div>
+      </div>
+      <div class="ct-option-group">
+        <div class="ct-option-label">重写风格</div>
+        <div class="ct-radio-grid">
+          <label class="ct-radio-card"><input type="radio" name="rewrite-style" value="casual" checked onchange="onRewriteStyleChange()"><span class="ct-radio-icon">💬</span><span class="ct-radio-text">更口语化<br><small>降低书面感</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="rewrite-style" value="literary" onchange="onRewriteStyleChange()"><span class="ct-radio-icon">📖</span><span class="ct-radio-text">更文学化<br><small>提升文笔</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="rewrite-style" value="tense" onchange="onRewriteStyleChange()"><span class="ct-radio-icon">😱</span><span class="ct-radio-text">更紧张感<br><small>增加悬念</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="rewrite-style" value="relaxed" onchange="onRewriteStyleChange()"><span class="ct-radio-icon">😄</span><span class="ct-radio-text">更轻松感<br><small>增加幽默</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="rewrite-style" value="perspective" onchange="onRewriteStyleChange()"><span class="ct-radio-icon">👁️</span><span class="ct-radio-text">换个视角<br><small>另一角色视角</small></span></label>
+          <label class="ct-radio-card"><input type="radio" name="rewrite-style" value="custom" onchange="onRewriteStyleChange()"><span class="ct-radio-icon">✏️</span><span class="ct-radio-text">自定义指令<br><small>自由输入</small></span></label>
+        </div>
+        <div class="mt-2 hidden" id="rewrite-custom-wrap" >
+          <input type="text" id="rewrite-custom-instruction" placeholder="输入自定义重写指令，如：用第一人称重写，语气要更加愤世嫉俗" class="ct-text-input">
+        </div>
+      </div>
+      <div >
+        <button class="btn-sm accept text-right" id="rewrite-run-btn" onclick="runRewrite()">开始重写</button>
+      </div>
+    </div>
+    <div class="creative-results" id="rewrite-results">
+      <div class="ct-empty"><p>选择重写风格，点击"开始重写"</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback Panel -->
+<div class="overlay-backdrop" id="feedback-overlay">
+  <div class="creative-panel" style="max-width:680px">
+    <div class="creative-header">
+      <h3>💡 5维写作反馈</h3>
+      <button class="icon-btn text-muted" onclick="closeFeedbackPanel()" ✕</button>
+    </div>
+    <div class="creative-controls text-muted">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="ct-feedback-dim-list">
+          <span class="ct-dim-chip">❤️ 情感张力</span>
+          <span class="ct-dim-chip">🎵 节奏感</span>
+          <span class="ct-dim-chip">🎨 画面感</span>
+          <span class="ct-dim-chip">💬 对话自然度</span>
+          <span class="ct-dim-chip">🪝 悬念设置</span>
+        </div>
+        <span class="flex-1" ></span>
+        <span class="ct-scope-badge" id="feedback-scope">当前章节全部内容</span>
+        <button class="btn-sm accept" id="feedback-run-btn" onclick="runFeedback()">开始评估</button>
+      </div>
+    </div>
+    <div class="creative-results" id="feedback-results">
+      <div class="ct-empty"><p>点击"开始评估"运行5维分析</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Toolbox Overlays ===== -->
+
+<!-- Export Panel -->
+<div class="overlay-backdrop hidden" id="export-overlay" >
+  <div class="toolbox-panel">
+    <div class="toolbox-header"><h3>📥 导出书籍</h3><button class="icon-btn text-muted" onclick="closeOverlay('export-overlay')" >✕</button></div>
+    <div class="p-5" >
+      <p style="color:var(--muted);font-size:13px;margin-bottom:16px">选择导出格式，将当前项目的所有章节导出为电子书。</p>
+      <!-- 平台模板选择 -->
+      <div style="margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">🌐 平台模板导出</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">选择网文平台，自动适配该平台的章节格式和元数据要求</div>
+        <div class="flex-center-sm" >
+          <select id="export-platform-select" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:12px;outline:none">
+            <option value="generic">通用导出（保持原格式）</option>
+            <option value="fanqie">🍅 番茄小说（3000字分章+简介）</option>
+            <option value="qidian">📖 起点中文网（按卷组织）</option>
+            <option value="qimao">🐱 七猫小说（封面占位+分章）</option>
+          </select>
+          <button id="btn-export-platform" onclick="exportByPlatform()" style="padding:7px 16px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">导出</button>
+        </div>
+        <div class="mt-2" id="export-platform-result" ></div>
+      </div>
+      <!-- 基础格式导出 -->
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px">基础格式导出</div>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button class="export-card card-select" onclick="exportBook('txt')" >
+          <div class="heading-hero" >📄</div><div class="title-ink-lg" >TXT</div><div class="label-muted-inline-xs" >纯文本格式</div>
+        </button>
+        <button class="export-card card-select" onclick="exportBook('epub')" >
+          <div class="heading-hero" >📚</div><div >EPUB</div><div class="label-muted-inline-xs title-ink-lg" >电子书格式</div>
+        </button>
+        <button class="export-card" onclick="exportBook('pdf')" style="flex:1;max-width:160px;padding:20px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);cursor:pointer;text-align:center;transition:all .2s">
+          <div class="heading-hero" >📕</div><div style="font-weight:600;font-size:14px;color:var(--ink)">PDF</div><div class="label-muted-inline-xs title-ink-lg" >文档格式</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Snapshot Diff Panel -->
+<div class="overlay-backdrop card-select hidden" id="snapshot-diff-overlay" >
+  <div class="toolbox-panel" style="max-width:800px">
+    <div class="toolbox-header"><h3>📋 版本对比</h3><button class="icon-btn text-muted" onclick="closeOverlay('snapshot-diff-overlay')" ✕</button></div>
+    <div class="p-4-5" >
+      <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:12px">
+        <div class="flex-1" ><label class="label-muted-md" >章节</label><select class="input-md" id="diff-chapter-select" onchange="loadDiffSnapshots()" ></select></div>
+        <div class="flex-1" ><label >快照A（旧）</label><select class="input-md label-muted-md" id="diff-snapshot-a" ></select></div>
+        <div class="flex-1" ><label class="label-muted-md" 快照B（新）</label><select class="label-muted-md" id="diff-snapshot-b" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:12px"></select></div>
+        <button class="btn-sm accept" onclick="runSnapshotDiff()" style="white-space:nowrap">对比</button>
+      </div>
+      <div id="diff-result" style="max-height:500px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-size:13px;line-height:1.8;display:none"></div>
+      <div id="diff-empty" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">选择两个快照进行对比</div>
+    </div>
+  </div>
+</div>
+
+<!-- Character Chat Panel -->
+<div class="overlay-backdrop hidden" id="character-chat-overlay" >
+  <div class="toolbox-panel" style="max-width:600px;height:80vh;display:flex;flex-direction:column">
+    <div class="toolbox-header"><h3>💬 角色对话模拟</h3><button class="icon-btn text-muted" onclick="closeOverlay('character-chat-overlay')" ✕</button></div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border-soft)">
+      <select id="chat-character-select" onchange="clearChatHistory()" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:12px"></select>
+    </div>
+    <div class="input-md" id="chat-messages" style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">选择一个角色开始对话</div>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border-soft);display:flex;gap:8px">
+      <input type="text" id="chat-input" placeholder="输入消息…" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;outline:none" onkeydown="if(event.key==='Enter')sendChatMessage()">
+      <button class="btn-sm accept" onclick="sendChatMessage()">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cloud Sync Panel -->
+<div class="overlay-backdrop hidden" id="sync-overlay" >
+  <div class="toolbox-panel" style="max-width:500px">
+    <div class="toolbox-header"><h3>☁️ 云同步设置</h3><button class="icon-btn text-muted" onclick="closeOverlay('sync-overlay')" ✕</button></div>
+    <div class="p-5" >
+      <div style="margin-bottom:12px"><label class="label-muted-md" WebDAV 地址</label><input class="input-lg label-muted-md" type="text" id="sync-url" placeholder="https://dav.jianguoyun.com/dav/" ></div>
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div class="flex-1" ><label >用户名</label><input class="input-lg label-muted-md" type="text" id="sync-username" placeholder="WebDAV用户名" ></div>
+        <div class="flex-1" ><label class="label-muted-md" 密码/应用密码</label><input class="label-muted-md" type="password" id="sync-password" placeholder="坚果云用应用密码" style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-size:13px;outline:none"></div>
+      </div>
+      <div class="mb-4" <label class="input-lg mb-4 label-muted-md" 远端路径</label><input class="label-muted-md" type="text" id="sync-remote-path" placeholder="/书斋备份/" ></div>
+      <div >
+        <button class="btn-sm flex-row-sm" onclick="saveSyncSettings()">💾 保存配置</button>
+        <button class="btn-sm" onclick="testSyncConnection()">🔌 测试连接</button>
+        <span class="flex-1" ></span>
+        <button class="btn-sm accept input-lg" onclick="doSyncPush()">⬆️ 上传</button>
+        <button class="btn-sm accept" onclick="doSyncPull()">⬇️ 拉取</button>
+      </div>
+      <div id="sync-status" style="margin-top:12px;font-size:12px;color:var(--muted);min-height:20px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Outline Templates Panel -->
+<div class="overlay-backdrop hidden" id="template-overlay" >
+  <div class="toolbox-panel modal-container hidden" >
+    <div class="toolbox-header"><h3>📐 大纲模板</h3><button class="icon-btn text-muted" onclick="closeOverlay('template-overlay')" ✕</button></div>
+    <div id="template-list" style="padding:16px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:12px"></div>
+  </div>
+</div>
+
+<!-- Batch Check Panel -->
+<div class="overlay-backdrop hidden" id="batch-check-overlay" >
+  <div class="toolbox-panel" style="max-width:800px;max-height:85vh;display:flex;flex-direction:column">
+    <div class="toolbox-header"><h3>🔍 批量检查</h3><button class="icon-btn text-muted" onclick="closeOverlay('batch-check-overlay')" ✕</button></div>
+    <div class="row-p4 text-muted" >
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">选择检查项目：</div>
+      <div id="batch-check-types" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+      <div class="flex-center-sm" >
+        <span class="text-md text-muted" 检查范围：</span>
+        <label class="text-md" ><input class="v-middle-gap-xs" type="radio" name="batch-scope" value="all" checked >全部章节</label>
+        <label ><input class="v-middle-gap-xs text-md" type="radio" name="batch-scope" value="custom" >自定义</label>
+        <span ></span>
+        <button class="btn-sm accept" onclick="runBatchCheck()">开始批量检查</button>
+      </div>
+    </div>
+    <div id="batch-check-result" style="flex:1;overflow:auto;padding:16px 20px"></div>
+  </div>
+</div>
+
+<!-- Writing Stats Panel -->
+<div class="overlay-backdrop hidden" id="stats-overlay" >
+  <div class="toolbox-panel modal-container hidden" >
+    <div class="toolbox-header"><h3>📊 写作统计</h3><button class="icon-btn text-muted" onclick="closeOverlay('stats-overlay')" ✕</button></div>
+    <div class="row-p4 text-muted" id="stats-summary" ></div>
+    <div >
+      <div class="title-semibold-md p-4-5" >近30天每日字数</div>
+      <div id="stats-chart" style="min-height:200px"></div>
+    </div>
+    <div style="padding:0 20px 16px">
+      <div class="title-semibold-md" >周统计</div>
+      <div id="stats-weekly" style="min-height:150px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// AI 配置结构（不含密钥，密钥从后端 /api/ai/config 或用户设置获取）
+window.__INITIAL_AI_CONFIG__ = {"provider":"deepseek","deepseek":{"api_key":"","base_url":"https://api.deepseek.com","model":"deepseek-v4-flash","thinking":"disabled","temperature":0.7,"max_tokens":4096},"ollama":{"base_url":"http://localhost:11434","model":"qwen2.5:14b","temperature":0.7,"max_tokens":4096},"openai":{"api_key":"","base_url":"https://api.openai.com/v1","model":"gpt-4o-mini","temperature":0.7,"max_tokens":4096}};
+</script>
+<script src="js/bundle.js?v=20260811-5"></script>
+
+<!-- 伏笔管理弹窗 -->
+<div id="foreshadow-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9997;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)closeForeshadowDialog()">
+  <div style="background:var(--bg);border-radius:12px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="row-between" >
+      <span class="title-ink-lg" >🔖 伏笔管理</span>
+      <button class="btn-ghost-icon-xl" onclick="closeForeshadowDialog()" >✕</button>
+    </div>
+    <div id="foreshadow-stats" style="padding:6px 12px;border-bottom:1px solid var(--border-soft);display:flex;gap:12px;font-size:11px;background:var(--bg)">
+      <span style="color:#3498db">活跃<span class="font-semibold ml-1" id="fs-active" >0</span>条</span>
+      <span style="color:#27ae60">已回收<span class="font-semibold ml-1" id="fs-recovered" >0</span>条</span>
+      <span class="text-red" 逾期<span class="font-semibold ml-1 text-red" id="fs-overdue" >0</span>条</span>
+    </div>
+    <div id="foreshadow-list" style="flex:1;overflow-y:auto;padding:8px 12px"></div>
+    <div style="padding:10px 12px;border-top:1px solid var(--border);background:var(--surface)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">+ 种植新伏笔</div>
+      <input type="text" id="hook-content" placeholder="伏笔内容（如：神秘玉佩的来历）" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink);margin-bottom:4px">
+      <div style="display:flex;gap:6px">
+        <input class="input-flex-md flex-row-xs" type="number" id="hook-planted" placeholder="种植章节" >
+        <input class="input-flex-md" type="number" id="hook-expected" placeholder="预期回收章" >
+        <button onclick="plantHook()" style="padding:6px 12px;border:none;border-radius:4px;background:var(--accent);color:#fff;font-size:12px;cursor:pointer;font-weight:600">种植</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 分卷纲要编辑弹窗 -->
+<div id="volume-outline-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9996;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)closeVolumeOutlineDialog()">
+  <div style="background:var(--bg);border-radius:12px;width:90%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="row-between" >
+      <span id="vo-dlg-title" >📋 编辑卷纲要</span>
+      <button class="btn-ghost-icon-xl title-ink-lg" onclick="closeVolumeOutlineDialog()" >✕</button>
+    </div>
+    <div id="vo-body" style="flex:1;overflow-y:auto;padding:12px 16px"></div>
+    <div style="padding:10px 16px;border-top:1px solid var(--border);background:var(--surface);display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeVolumeOutlineDialog()" style="padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--muted);font-size:13px;cursor:pointer">取消</button>
+      <button onclick="saveVolumeOutline()" style="padding:6px 20px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-weight:600">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Assistant Floating Panel -->
+<div id="ai-assistant-fab" onclick="toggleAIAssistant()" style="position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.3);z-index:9998;font-size:24px;transition:transform .2s" title="AI助手" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">🤖</div>
+
+<div id="ai-assistant-panel" style="display:none;position:fixed;bottom:0;right:0;width:400px;height:600px;max-height:100vh;background:var(--bg);border:1px solid var(--border);border-radius:12px 0 0 12px;box-shadow:-8px 0 32px rgba(0,0,0,0.2);z-index:9999;flex-direction:column;overflow:hidden">
+  <style>
+    @media(max-width:640px){
+      #ai-assistant-panel{width:100%!important;height:100vh!important;border-radius:0!important;max-height:100vh!important}
+      #ai-assistant-fab{width:48px;height:48px;bottom:16px;right:16px}
+    }
+    #ai-assistant-header{cursor:move;user-select:none}
+    #ai-assistant-header:active{cursor:grabbing}
+    #ai-assistant-header button{pointer-events:auto;position:relative;z-index:10}
+  </style>
+  <div id="ai-assistant-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--accent);color:#fff">
+    <span style="font-size:14px;font-weight:600;cursor:move">🤖 AI助手</span>
+    <div class="flex-row-xs" style="gap:8px">
+      <button onclick="startCreativeWizard(true)" style="background:none;border:1px solid rgba(255,255,255,.4);color:#fff;cursor:pointer;font-size:11px;padding:3px 10px;border-radius:12px;opacity:.9" title="创作向导">🎯 创作向导</button>
+      <button onclick="clearAssistantChat()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:12px;opacity:.8" title="清空">🗑</button>
+      <button onclick="toggleAIAssistant()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;opacity:.8" title="收起">▼</button>
+    </div>
+  </div>
+  <div id="assistant-messages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px">
+    <div style="text-align:center;color:var(--muted);font-size:12px;padding:8px">
+      💡 直接告诉我你想做什么，比如：<br>
+      "检查第2章连贯性" · "导出epub" · "这周写了多少字" · "列出角色"<br>
+      <span style="color:var(--accent);font-size:11px">📝 选中编辑器里的文字，然后输入修改要求，可以只改选中部分</span>
+    </div>
+  </div>
+  <div style="padding:10px 12px;border-top:1px solid var(--border-soft);display:flex;gap:8px;align-items:center">
+    <input type="file" id="assistant-file-input" style="display:none" accept=".txt,.md,.json,.csv,.log" onchange="handleAssistantFileUpload(this)">
+    <button onclick="document.getElementById('assistant-file-input').click()" title="上传文件作为上下文" style="width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">📎</button>
+    <span id="assistant-file-badge" style="display:none;font-size:11px;color:var(--accent);background:var(--surface);padding:2px 8px;border-radius:10px;border:1px solid var(--accent);cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="clearAssistantFile()" title="点击移除"></span>
+    <input type="text" id="assistant-input" placeholder="输入指令..." style="flex:1;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:20px;color:var(--ink);font-size:13px;outline:none" onkeydown="if(event.key==='Enter')sendAssistantMessage()">
+    <button onclick="sendAssistantMessage()" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">➤</button>
+  </div>
+</div>
+
+<!-- 扫榜分析面板 -->
+<div class="overlay-backdrop hidden" id="ranking-overlay" >
+  <div class="toolbox-panel" style="max-width:1000px;max-height:88vh;display:flex;flex-direction:column">
+    <div class="toolbox-header">
+      <h3>📊 扫榜分析（多平台）</h3>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="input-inline-md" id="ranking-platform-select" onchange="onPlatformChange()" >
+          <option value="jjwxc" selected>晋江文学城</option>
+          <option value="qidian">起点中文网</option>
+          <option value="fanqie">番茄小说</option>
+          <option value="feilu">飞卢小说</option>
+          <option value="qidian_girl">起点女生网</option>
+          <option value="qimao">七猫小说</option>
+          <option value="ciweimao">刺猬猫</option>
+          <option value="zongheng">纵横中文网</option>
+        </select>
+        <select class="input-inline-md" id="ranking-type-select" onchange="loadRankingList()" >
+          <option value="hot">热销榜</option>
+        </select>
+        <select id="ranking-category-select" onchange="loadRankingList()" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink);font-size:12px">
+          <option value="all">全部分类</option>
+        </select>
+        <select class="input-inline-md" id="ranking-genre-select" onchange="loadRankingSuggestions()" >
+          <option value="">选择题材</option>
+          <option value="玄幻">玄幻</option><option value="都市">都市</option><option value="仙侠">仙侠</option>
+          <option value="科幻">科幻</option><option value="历史">历史</option><option value="游戏">游戏</option>
+          <option value="轻小说">轻小说</option><option value="悬疑">悬疑</option>
+          <option value="武侠">武侠</option><option value="奇幻">奇幻</option>
+          <option value="古言">古言</option><option value="现言">现言</option>
+          <option value="军事">军事</option><option value="现实">现实</option>
+        </select>
+        <button onclick="refreshRanking()" style="padding:4px 10px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🔄 刷新</button>
+        <button class="icon-btn text-muted" onclick="closeOverlay('ranking-overlay')" ✕</button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px">
+      <!-- 数据来源提示 -->
+      <div id="ranking-source-info" style="margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:6px;font-size:11px;color:var(--muted);display:none"></div>
+      <!-- 热门题材排行 -->
+      <div class="mb-5" >
+        <h4 class="title-accent-mb10" >📈 热门题材排行</h4>
+        <div id="ranking-genre-chart" style="display:flex;align-items:flex-end;gap:10px;min-height:160px;padding:10px 0;border-bottom:2px solid var(--border);overflow-x:auto">
+          <div class="empty-state-md" >加载中...</div>
+        </div>
+      </div>
+      <!-- 趋势曲线 -->
+      <div >
+        <h4 class="title-accent-mb10 mb-5" >📉 趋势曲线</h4>
+        <div id="ranking-trends" style="min-height:150px;padding:10px;background:var(--bg);border-radius:6px">
+          <div class="empty-state-md" >加载中...</div>
+        </div>
+      </div>
+      <!-- 榜单 -->
+      <div >
+        <h4 class="title-accent-mb10 mb-5" id="ranking-list-title" >🏆 榜单 TOP 20</h4>
+        <div id="ranking-list" style="max-height:400px;overflow-y:auto">
+          <div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">加载中...</div>
+        </div>
+      </div>
+      <!-- 创作建议 -->
+      <div>
+        <h4 style="margin:0 0 10px;font-size:14px;color:var(--accent)">💡 创作建议</h4>
+        <div class="title-accent-mb10" id="ranking-suggestions" style="padding:12px;background:var(--bg);border-radius:6px;border-left:3px solid var(--accent)">
+          <div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">选择题材后显示创作建议</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+
+
+ 
+
+<!-- 白城主 Flow Editor -->
+<div id="white-city-panel" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:900;background:#1a1a2e;"></div>
+</body>
+ </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
