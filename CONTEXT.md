@@ -17,7 +17,7 @@
 
 ## 运行与验证路由
 
-- **启动**：`start.bat`（自动定位真实 Python——优先 `H:\Marvis\MarvisAgent\*\runtime\python311\python.exe`，
+- **启动**：`start.bat`（自动定位真实 Python——优先本机安装的 Python 运行时，
   跳过 Microsoft Store 假壳；安装依赖并以 5 次重试启动 `server.py`）。
 - **测试**：`python -m pytest tests -v --tb=short`（37 个契约测试；`backend.auth` 已从产品移除，
   相关测试经 `importorskip` 跳过）。pre-commit 钩子会自动跑 pytest + 前端 bundle 漂移检查。

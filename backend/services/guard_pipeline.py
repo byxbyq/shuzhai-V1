@@ -1,7 +1,7 @@
 """
 统一 Guard 管线（Guard Pipeline）
 
-对标 ProseForge 的 Quality Gate + RuleQualityService 守卫字典模式，
+参考成熟 LLM 写作工具的 Quality Gate 守卫字典模式，
 将书斋分散在多个模块的质量检查统一为 FAIL/BLOCK/WARN/INFO 四级管线。
 
 确定性门禁（零 AI 调用）：
@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional
 # ============================================================
 
 class GuardSeverity(Enum):
-    """门禁严重级别，与 ProseForge 对齐"""
+    """门禁严重级别"""
     BLOCK = "block"   # 硬阻断：必须修复才能继续
     WARN = "warn"     # 警告：记录但允许继续
     INFO = "info"     # 提示：仅记录
@@ -177,7 +177,7 @@ class GuardPipeline:
 
 CJK_NGRAM_THRESHOLDS = {4: 8, 5: 6, 6: 5}
 """n-gram 长度 → 最大允许出现次数（超过即阻断）
-来源：ProseForge agent_executor.py Quality Gate"""
+基于 n-gram 统计规则设计"""
 
 
 def check_cjk_ngram_repeat(content: str, context: Optional[Dict] = None) -> List[GuardIssue]:
@@ -186,7 +186,7 @@ def check_cjk_ngram_repeat(content: str, context: Optional[Dict] = None) -> List
     检测中文正文中同一连续片段是否被机械重复使用。
     基于纯规则，零 AI 调用，毫秒级完成。
 
-    阈值（ProseForge 标准）：
+    阈值（参考标准）：
     - 4 字片段出现 >= 8 次 → BLOCK
     - 5 字片段出现 >= 6 次 → BLOCK
     - 6 字片段出现 >= 5 次 → BLOCK
@@ -250,7 +250,7 @@ def check_paragraph_start_repeat(content: str, context: Optional[Dict] = None) -
     检测段落开头的 2 字 bigram 是否重复过多，
     反映 AI 写作中常见的"段首模板化"问题。
 
-    阈值（ProseForge 标准）：
+    阈值（参考标准）：
     - 重复段首占比 > 40% → WARN
     """
     paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
@@ -300,7 +300,7 @@ def check_consecutive_summary_endings(content: str, context: Optional[Dict] = No
     检测段落是否以"总而言之""这一夜让……"等总结句连续结尾，
     反映 AI 写作中"每段强行总结升华"的腔调。
 
-    阈值（ProseForge 标准）：
+    阈值（参考标准）：
     - 连续 >= 3 段总结式结尾 → WARN
     """
     paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
@@ -350,7 +350,7 @@ def check_required_clues(content: str, context: Optional[Dict] = None) -> List[G
     - required_clues: List[str] — 必含线索列表
     - clue_match_mode: "exact" | "fuzzy" — 匹配模式（默认 fuzzy）
 
-    阈值（ProseForge 标准）：
+    阈值（参考标准）：
     - 精确子串命中 或 模糊片段覆盖率 >= 60% → 命中
     - 全部未命中 → BLOCK
     - 部分未命中 → WARN

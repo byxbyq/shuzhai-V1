@@ -710,9 +710,9 @@ function applyGuidePreset(scene) {
 
     if (scene === 'short') {
       enableIds = ['tomato-short-story-base','anti-ai-wuhang','hook-opener-library','short-fiction-flow'];
-      disableIds = ['pacing-control','golden-three-chapters','strand-weave-rhythm','chapter-positioning','style-upgrade','genre-templates-37','humanizer-v3-integrated','deslop-7gate','de-ai-writer-booster','anti-ai-base'];
+      disableIds = ['pacing-control','golden-three-chapters','strand-weave-rhythm','chapter-positioning','style-upgrade','genre-templates-37','deslop-7gate','anti-ai-base'];
     } else if (scene === 'long') {
-      enableIds = ['humanizer-v3-integrated','pacing-control','golden-three-chapters','strand-weave-rhythm','chapter-positioning','hook-opener-library'];
+      enableIds = ['pacing-control','golden-three-chapters','strand-weave-rhythm','chapter-positioning','hook-opener-library'];
       disableIds = ['tomato-short-story-base','short-fiction-flow',
         'short-reborn-revenge','short-ceo-marriage-first','short-mystery-twist',
         'short-infinite-flow','short-time-travel-history','short-cyberpunk',

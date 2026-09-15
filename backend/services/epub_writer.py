@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """纯 Python stdlib EPUB 3.0 生成器 — 零外部依赖，MIT 兼容。
 
-基于 zipfile + xml.etree.ElementTree 实现，精确覆盖原 EbookLib 的
+基于 zipfile + xml.etree.ElementTree 实现，精确覆盖原 epub 库的
 全部调用模式，无需修改上层业务逻辑。
 
 用法示例:
@@ -95,7 +95,7 @@ def _escape_xml_entities(text: str) -> str:
 class EpubWriter:
     """纯 stdlib EPUB 3.0 生成器，零依赖，MIT 兼容。
 
-    精确覆盖 EbookLib 的 epub.EpubBook / epub.EpubHtml / epub.EpubItem /
+    精确覆盖 epub 库的 epub.EpubBook / epub.EpubHtml / epub.EpubItem /
     epub.EpubNcx / epub.EpubNav / epub.write_epub 全部调用模式。
     """
 
@@ -194,7 +194,7 @@ class EpubWriter:
         self._has_cover = True
 
     def get_chapter(self, file_name: str) -> _ChapterProxy:
-        """获取已添加的章节对象（兼容 EbookLib 的 .add_item 模式）。
+        """获取已添加的章节对象（兼容 epub 库的 .add_item 模式）。
 
         返回代理对象，其 .add_item() 为 no-op——因为 add_chapter /
         set_cover 已自动关联所有已注册样式表。

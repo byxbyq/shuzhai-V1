@@ -54,7 +54,7 @@ async function loadChapterContentAPI(index) {
     if (!action) return;
     DraftManager.forceExit();
   }
-  // 借鉴 inkos 设计：OperationContext 冲突检测
+  // 借鉴既有冲突检测模式：OperationContext 冲突检测
   // 如果有活跃的异步AI操作正在进行（如AI修复、生成正文），阻止切章
   if (window.OperationContext && OperationContext.hasActiveWrite()) {
     var ctx = OperationContext.getActive();

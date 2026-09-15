@@ -14,7 +14,7 @@ start.bat
 
 ## 从零部署（新机器）
 
-本机环境依赖 `H:\Marvis\MarvisAgent\*\runtime\python311\python.exe`（start.bat 自动探测）。
+本机环境依赖 Python 3.10+（start.bat 自动探测真实 Python 路径）。
 若新机器没有该运行时，按以下步骤自建环境：
 
 1. 安装 **Python 3.11**（加入 PATH；注意 Microsoft Store 版是重定向假壳，请用官网安装包）

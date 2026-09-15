@@ -285,7 +285,7 @@ def detect_ai_flavor(content: str) -> Dict:
             total_deduction += 5
 
     # ═══════════════════════════════════════
-    # Part B2: oh-story 7Gate 确定性预检（零Token）
+    # Part B2: 7Gate 确定性预检（零Token）
     # ═══════════════════════════════════════
 
     # Gate B: 否定铺垫句式（最毒AI句式）

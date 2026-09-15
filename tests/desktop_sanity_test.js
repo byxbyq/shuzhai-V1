@@ -8,8 +8,8 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE_URL = 'http://localhost:8894';
-const SCREENSHOT_DIR = 'H:/小说/书斋V66-重构/test_screenshots/desktop_test';
-const REPORT_FILE = 'H:/小说/书斋V66-重构/test_screenshots/desktop_test/sanity_report.json';
+const SCREENSHOT_DIR = process.env.TEST_SCREENSHOT_DIR || path.join(__dirname, '..', 'test_screenshots', 'desktop_test');
+const REPORT_FILE = path.join(SCREENSHOT_DIR, 'sanity_report.json');
 
 if (!fs.existsSync(SCREENSHOT_DIR)) fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
@@ -58,7 +58,6 @@ async function run() {
   const browser = await chromium.launch({
     headless: false,
     args: ['--no-sandbox', '--disable-gpu'],
-    executablePath: 'C:/Users/user/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe'
   });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, locale: 'zh-CN' });
 

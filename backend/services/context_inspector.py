@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""上下文透视（Context Inspector）— 对标 ProseForge 上下文透视面板
+"""上下文透视（Context Inspector）— 书斋自研上下文透视面板
 
 核心职责：
   - 记录每次 AI 调用的 prompt 结构快照：注入的块（章节标题行识别）、

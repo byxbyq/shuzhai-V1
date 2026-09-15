@@ -1,0 +1,42 @@
+书斋 V66（ShuZhai V66）
+
+Copyright (c) 2024-2026 白城主 (BaiChengZhu)
+
+本软件采用双重授权（Dual License）：
+
+1. 开源授权（MIT License）
+   你可以根据下方 MIT 许可证的条款，自由使用、复制、修改、合并、出版发行、
+   散布、再授权及贩售本软件，但须保留本版权声明与许可声明。
+
+2. 商业授权（Commercial License）
+   若你希望将本软件用于闭源、专有或商业分发（不公开源代码、不公开修改），
+   且不希望受 MIT 许可证「须保留版权声明与许可声明 / 开源分发」条款约束，
+   请与版权人另行签订商业授权协议。
+   版权人保留在不开源前提下进行商业分发、付费授权、闭源二次分发的全部权利。
+
+除 MIT 许可证明确授予的权利外，版权人保留一切其他权利，包括但不限于
+对上述商业授权的独家决定权。任何新增代码、依赖或第三方素材，均须遵守
+本仓库 COMPLIANCE 规则（见 THIRD_PARTY_LICENSES.md 与 DEPENDENCY_WHITELIST.md），
+禁止引入 AGPL / GPL 等 copyleft 许可，禁止引入非商业限制性开源协议，
+禁止引入未明确许可的外部脚本、技能、常量或文本。
+
+----------------------------------------------------------------------
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

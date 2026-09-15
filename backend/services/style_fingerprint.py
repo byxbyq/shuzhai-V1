@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # H5: 文风指纹系统 — 提取+对比+注入指南生成
 # ═══════════════════════════════════════════
 
-# 修辞模式检测（参考InkOS style-analyzer）
+# 修辞模式检测（自研规则集）
 RHETORICAL_PATTERNS_ZH = [
     {'name': '比喻(像/如/仿佛)', 'regex': r'[像如仿佛似](?:是|同|一般|一样)'},
     {'name': '排比', 'regex': r'[，。；]([^，。；]{2,6})[，。；]\1'},
@@ -28,7 +28,7 @@ RHETORICAL_PATTERNS_ZH = [
 def extract_style_fingerprint(text: str, source_name: str = "") -> Dict:
     """从参考文本中提取文风指纹（纯统计分析，不消耗Token）
 
-    参考: InkOS style-analyzer.ts (MIT协议)
+    参考: 公开写作理论整理归纳
     """
     if not text or len(text) < 200:
         return {'error': '文本太短（需≥200字）', 'source_name': source_name}

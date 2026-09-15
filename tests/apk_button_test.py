@@ -14,9 +14,9 @@ import os
 import time
 import json
 
-SCREENSHOT_DIR = "H:/小说/书斋V66-重构/test_screenshots/apk_test"
-REPORT_FILE = "H:/小说/书斋V66-重构/test_screenshots/apk_test/report.json"
-ADB = "C:/Users/user/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+SCREENSHOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test_screenshots", "apk_test")
+REPORT_FILE = os.path.join(SCREENSHOT_DIR, "report.json")
+ADB = os.environ.get("ADB_PATH", "adb")
 DEVICE = "emulator-5554"
 PACKAGE = "com.shuzhai.writer"
 

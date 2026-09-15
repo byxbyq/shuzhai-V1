@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """逆向导入路由 - /api/import/*
-将已有小说反向解析为标准项目结构。参考oh-story-claudecode的story-import skill。
+将已有小说反向解析为标准项目结构。自研 story-import 逻辑。
 """
 from fastapi import APIRouter
 from pydantic import BaseModel

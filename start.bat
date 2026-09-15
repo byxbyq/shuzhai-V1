@@ -6,8 +6,8 @@ chcp 65001 >nul
 
 :: ===== 定位真 Python（跳过 Microsoft Store 假壳） =====
 set PYTHON=
-for /d %%d in ("H:\Marvis\MarvisAgent\*") do (
-    if exist "%%d\runtime\python311\python.exe" set "PYTHON=%%d\runtime\python311\python.exe"
+for /d %%d in ("%LOCALAPPDATA%\Programs\Python\*") do (
+    if exist "%%d\python.exe" set "PYTHON=%%d\python.exe"
 )
 if "%PYTHON%"=="" (
     for %%p in (python3.11 python3 python) do (

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 class ContextLayer(Enum):
-    """上下文分层枚举，与 ProseForge 对齐"""
+    """上下文分层枚举"""
     STATIC = auto()       # 不变层：世界观、设定库、全书大纲
     SEMI_STATIC = auto()  # 半静态层：人物档案、伏笔状态
     DYNAMIC = auto()      # 动态层：时间线、向量记忆、蒸馏记忆
