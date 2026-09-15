@@ -403,9 +403,6 @@ window.openVolumeOutlineDialog = async function(volIndex, volTitle) {
 // 暴露内联函数到全局，供app.js和onclick使用
 window.openVolumeOutlineDialog = openVolumeOutlineDialog;
 window.closeVolumeOutlineDialog = closeVolumeOutlineDialog;
-window.saveVolumeOutline = saveVolumeOutline;
-window.addVolumeOutlineDynItem = addVolumeOutlineDynItem;
-window.goToStep = goToStep;
 window.loadContextPanel = loadContextPanel;
 window.loadProjectSettings = loadProjectSettings;
 window.loadProjectOutline = loadProjectOutline;
