@@ -70,6 +70,18 @@ docs/plans/                架构规划与分析报告
 - [API_CONTRACT.md](API_CONTRACT.md) — 响应信封与状态码语义（路由测试的唯一断言依据）
 - `docs/agents/` — issue 跟踪、分诊标签、领域约定
 
+## 开源与合规
+
+本项目为开源发布版本（开源副本），遵循以下许可与合规约定：
+
+- **许可证**：`LICENSE` — MIT + 商业双授权。个人/学习/非商业用途遵循 MIT 条款；将本项目或其衍生作品用于**商业用途**（含内部商用部署）需另行取得授权，详见 LICENSE 正文。
+- **第三方依赖声明**：`THIRD_PARTY_LICENSES.md` 汇总全部第三方组件及其许可；`DEPENDENCY_WHITELIST.md` 为依赖白名单台账（70 项，含许可类型与授权状态）。
+- **合规门禁**：`tools/gate_license.py` 在提交/发布前自动校验六项规则（禁用许可关键词、来源指纹、依赖台账登记、许可标注一致性等），运行方式：
+  ```bat
+  python tools/gate_license.py
+  ```
+- **数据与运行时说明**：本仓库不包含用户书稿数据（`data/` 仅保留配置骨架），首次启动自动初始化；AI 生成能力依赖 torch/transformers 等重型依赖（见 requirements.txt），轻量部署见 `requirements-mobile.txt`。
+
 ## 提交护栏
 
 `.git/hooks/pre-commit`（仓库内可重装副本 `scripts/pre-commit`）在每次提交前自动执行：
