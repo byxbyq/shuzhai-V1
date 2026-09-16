@@ -184,7 +184,7 @@ if __name__ == "__main__":
         for p in range(start, start + 20):
             try:
                 s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
-                s.bind(("0.0.0.0", p))
+                s.bind(("127.0.0.1", p))
                 s.close()
                 return p
             except OSError:

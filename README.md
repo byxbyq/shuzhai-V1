@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 62a5f052892935463ed1c42751e16e2e_d73c2bd5b11311f18874525400287e28
+    ReservedCode1: 1+QejLVbX1MFooh0LaLqsTg6a1wyZW7/TH4ERqTCk4qzK8l9k7PpRlaVvmxmNe3FHYL+rotZomt8Oz4UJ7ICeuJDpfk0eHLNtOCjymjxgJT9r4RpUVSnaCpIDYLj4cc9bDsZlGMpfANN0vZvJFGEvvMaHvZvwMoeRwOMtjqyXM2DHkBvlvc+onf3jK4=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 62a5f052892935463ed1c42751e16e2e_d73c2bd5b11311f18874525400287e28
+    ReservedCode2: 1+QejLVbX1MFooh0LaLqsTg6a1wyZW7/TH4ERqTCk4qzK8l9k7PpRlaVvmxmNe3FHYL+rotZomt8Oz4UJ7ICeuJDpfk0eHLNtOCjymjxgJT9r4RpUVSnaCpIDYLj4cc9bDsZlGMpfANN0vZvJFGEvvMaHvZvwMoeRwOMtjqyXM2DHkBvlvc+onf3jK4=
+---
+
 # 书斋 V66 — 小说创作智能助手
 
 FastAPI 后端 + Vanilla JS SPA 前端 + Capacitor APK（Chaquopy 内嵌后端副本）的单机小说创作工具。
@@ -91,3 +102,4 @@ docs/plans/                架构规划与分析报告
 3. `build-bundle.js --check` — 前端 bundle 与源文件一致性（node 可用时）
 
 重装钩子：`cp scripts/pre-commit .git/hooks/pre-commit`
+*（内容由AI生成，仅供参考）*

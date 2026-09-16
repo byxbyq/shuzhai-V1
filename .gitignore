@@ -85,3 +85,6 @@ backend/data/ai_config.json
 # 运行时日志与临时产物
 logs/
 output/
+
+# 运行时上下文审计产物
+data/context_inspection.json

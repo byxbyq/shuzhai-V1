@@ -7,7 +7,6 @@
 // 所有模块通过 STEPS.xxx 引用步号，硬编码 goToStep(N) 已消除
 // 调整步骤顺序时只需修改此文件中的数值
 (function(global) {
-  'use strict';
 
   var S = {
     世界观:     1,
@@ -1933,7 +1932,7 @@ var _ctx = function(content, pos, span) {
 };
 
 // ─── 维度21: 对话碎片化 ───
-var _detectDialogueFragmentation = function(content) {
+window._detectDialogueFragmentation = function(content) {
   var issues = [];
   var matches = content.match(/[""\u201c\u201d\u300c\u300d\u300e\u300f\u2018\u2019](.*?)[""\u201c\u201d\u300c\u300d\u300e\u300f\u2018\u2019]/g);
   if (!matches || matches.length < 5) return issues;
@@ -1964,7 +1963,7 @@ var _detectDialogueFragmentation = function(content) {
 };
 
 // ─── 维度22: 情感悬浮 ───
-var _detectEmotionSuspension = function(content) {
+window._detectEmotionSuspension = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -1989,7 +1988,7 @@ var _detectEmotionSuspension = function(content) {
 };
 
 // ─── 维度23: 描写单调 ───
-var _detectDescriptionMonotony = function(content) {
+window._detectDescriptionMonotony = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -2014,7 +2013,7 @@ var _detectDescriptionMonotony = function(content) {
 };
 
 // ─── 维度24: 成语滥用 ───
-var _detectIdiomAbuse = function(content) {
+window._detectIdiomAbuse = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -2043,7 +2042,7 @@ var _detectIdiomAbuse = function(content) {
 };
 
 // ─── 维度25: 过度修饰 ───
-var _detectOverModification = function(content) {
+window._detectOverModification = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -2067,7 +2066,7 @@ var _detectOverModification = function(content) {
 };
 
 // ─── 维度26: 视角漂移 ───
-var _detectPovDrift = function(content) {
+window._detectPovDrift = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -2116,7 +2115,7 @@ var _detectPovDrift = function(content) {
 };
 
 // ─── 维度27: 水文检测 ───
-var _detectWaterContent = function(content) {
+window._detectWaterContent = function(content) {
   var issues = [];
   var paras = content.split('\n').filter(function(p) { return p.trim().length > 20; });
   if (paras.length < 3) return issues;
@@ -2156,7 +2155,7 @@ var _detectWaterContent = function(content) {
 };
 
 // ─── 维度17: 逻辑漏洞 ───
-var _detectLogicGaps = function(content) {
+window._detectLogicGaps = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -2185,7 +2184,7 @@ var _detectLogicGaps = function(content) {
 };
 
 // ─── 维度16: 高潮缺失 ───
-var _detectClimaxMissing = function(content) {
+window._detectClimaxMissing = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 500) return issues;
@@ -2206,7 +2205,7 @@ var _detectClimaxMissing = function(content) {
 };
 
 // ─── 维度20: 工具人 ───
-var _detectToolCharacter = function(content) {
+window._detectToolCharacter = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 300) return issues;
@@ -2233,7 +2232,7 @@ var _detectToolCharacter = function(content) {
 };
 
 // ─── 维度18: 角色崩坏 ───
-var _detectCharacterBreak = function(content, characters) {
+window._detectCharacterBreak = function(content, characters) {
   var issues = [];
   if (!characters || !characters.length) return issues;
   var cc = content.length;
@@ -2276,7 +2275,7 @@ var _detectCharacterBreak = function(content, characters) {
 };
 
 // ─── 维度19: 开场吸引力 ───
-var _detectOpeningEngagement = function(content) {
+window._detectOpeningEngagement = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -2300,7 +2299,7 @@ var _detectOpeningEngagement = function(content) {
 };
 
 // ─── 维度: 段落健康 ───
-var _detectParagraphHealth = function(content) {
+window._detectParagraphHealth = function(content) {
   var issues = [];
   var paras = content.split('\n').filter(function(p) { return p.trim().length > 0; });
   if (paras.length < 3) return issues;
@@ -2327,7 +2326,7 @@ var _detectParagraphHealth = function(content) {
 };
 
 // ─── 维度: 信息密度 ───
-var _detectInfoDensity = function(content) {
+window._detectInfoDensity = function(content) {
   var issues = [];
   var cc = content.length;
   if (cc < 200) return issues;
@@ -5554,13 +5553,13 @@ var OfflineDB = (function() {
   var FORBIDDEN_PLOTS = Common.FORBIDDEN_PLOTS || [];
   var _countSub = Common._countSub || function () { return 0; };
   var _truncate = Common._truncate || function (s) { return s || ''; };
-  var _isChinese = Common._isChinese || function () { return false; };
+  window._isChinese = Common._isChinese || function () { return false; };
   var _extractKeywords = Common._extractKeywords || function () { return []; };
   var _parseJSONLenient = Common._parseJSONLenient || function () { return null; };
   var _worldToPrompt = Common._worldToPrompt || function () { return ''; };
   var _triggerLorebook = Common._triggerLorebook || function () { return ''; };
-  var _buildCharacterContext = Common._buildCharacterContext || function () { return ''; };
-  var _buildForeshadowContext = Common._buildForeshadowContext || function () { return ''; };
+  window._buildCharacterContext = Common._buildCharacterContext || function () { return ''; };
+  window._buildForeshadowContext = Common._buildForeshadowContext || function () { return ''; };
   var postProcess = Common.postProcess || function (s) { return s; };
   var runHardChecks = Common.runHardChecks || function () { return []; };
 
@@ -12321,7 +12320,7 @@ function extractOutlineFromNovelActs(chIndex) {
       // 清除待执行的saveWorldMeta debounce定时器（防止旧项目保存请求覆盖新项目）
       if (typeof _debounceSaveTimer !== 'undefined' && _debounceSaveTimer) {
         clearTimeout(_debounceSaveTimer);
-        _debounceSaveTimer = null;
+        window._debounceSaveTimer = null;
       }
       if (typeof characters !== 'undefined') {
         characters = [];
@@ -12359,7 +12358,7 @@ function extractOutlineFromNovelActs(chIndex) {
       // 5. 刷新上下文面板
       loadContextPanel();
       // 6. 如果当前在步骤3，刷新章节大纲编辑器
-      if (currentWorkflowStep === STEPS.章节大纲 && typeof renderChapterOutlineEditor === 'function') {
+      if (typeof currentWorkflowStep !== 'undefined' && currentWorkflowStep === STEPS.章节大纲 && typeof renderChapterOutlineEditor === 'function') {
         renderChapterOutlineEditor();
       }
     } catch(e) { console.error('reloadAllProjectData error:', e); }
@@ -13259,7 +13258,7 @@ async function loadChapterContentAPI(index) {
         }
       }
       // 如果当前在章节大纲步骤，刷新编辑器
-      if (typeof workflowState !== 'undefined' && currentWorkflowStep === STEPS.章节大纲 && typeof renderChapterOutlineEditor === 'function') {
+      if (typeof workflowState !== 'undefined' && typeof currentWorkflowStep !== 'undefined' && currentWorkflowStep === STEPS.章节大纲 && typeof renderChapterOutlineEditor === 'function') {
         renderChapterOutlineEditor();
       }
       
@@ -30247,7 +30246,7 @@ document.addEventListener('DOMContentLoaded', function() { Reader.init(); });
   'use strict';
 
 
-var _debounceSaveTimer = null;
+window._debounceSaveTimer = null;
 window.debounceSaveWorldMeta = function() {
   clearTimeout(_debounceSaveTimer);
   _debounceSaveTimer = setTimeout(saveWorldMeta, 600);
@@ -30368,7 +30367,7 @@ window._labelOfWorldFieldKey = function(fieldKey) {
 
 /* ===== Define renderSettingsEditor for enhanced UI ===== */
 (function() {
-  renderSettingsEditor = function(highlightKey) {
+  window.renderSettingsEditor = function(highlightKey) {
     const ed = document.getElementById('settings-editor');
     if (!ed) return;
     ed.innerHTML = '';
@@ -30925,7 +30924,7 @@ window._bindBsGraphNodes = function(svg) {
       if (!_bsConnectMode) return;
       e.stopPropagation();
       if (!_bsConnectSource) {
-        _bsConnectSource = cardId;
+        window._bsConnectSource = cardId;
         _renderBsGraph();
       } else if (_bsConnectSource !== cardId) {
         // 创建连线（避免重复）
@@ -30936,8 +30935,8 @@ window._bindBsGraphNodes = function(svg) {
           _bsEdges.push({src: _bsConnectSource, dst: cardId});
           _saveBrainstormCards();
         }
-        _bsConnectSource = null;
-        _bsConnectMode = false;
+        window._bsConnectSource = null;
+        window._bsConnectMode = false;
         toggleBsConnectMode(); // 重置按钮状态
         _renderBsGraph();
       }
@@ -30963,7 +30962,7 @@ window._bindBsGraphNodes = function(svg) {
   });
 }
 window.selectSenseTab = function(sense) {
-  _currentSenseType = sense;
+  window._currentSenseType = sense;
   document.querySelectorAll('.sense-tab').forEach(function(t) {
     t.classList.toggle('active', t.dataset.sense === sense);
   });
@@ -31371,7 +31370,7 @@ window.closeBrainstormPanel = function() {
 }
 
 /* ===== Sensory Description Tool ===== */
-var _currentSenseType = 'all';
+window._currentSenseType = 'all';
 
 window.openSensoryPanel = function() {
   var overlay = document.getElementById('sensory-overlay');
@@ -31388,11 +31387,11 @@ spinStyle.textContent = '@keyframes spin { from { transform: rotate(0deg); } to 
 document.head.appendChild(spinStyle);
 
 /* ===== C4 章节预览确认 ===== */
-var _chapterPreviewData = null; // {content, chapterIndex, title, validationLog, onConfirm}
+window._chapterPreviewData = null; // {content, chapterIndex, title, validationLog, onConfirm}
 
 /* ===== E 关系图可视化 ===== */
-var _graphNodes = [];
-var _graphEdges = [];
+window._graphNodes = [];
+window._graphEdges = [];
 
 window.openGraphView = function() {
   var overlay = document.getElementById('graph-overlay');
@@ -31610,8 +31609,8 @@ window.addEventListener('DOMContentLoaded', function() {
 // ═══════════════════════════════════════════
 // 分卷纲要编辑面板
 // ═══════════════════════════════════════════
-var _currentVolumeOutlineIdx = -1;
-var _currentVolumeEditIndex = -1; // for inline step editor
+window._currentVolumeOutlineIdx = -1;
+window._currentVolumeEditIndex = -1; // for inline step editor
 
 window.closeVolumeOutlineDialog = function() {
   var dlg = document.getElementById('volume-outline-dialog');
@@ -31741,7 +31740,7 @@ window.showWireframeGuide = function(type) {
   if (type === 'pre-write') {
     // 标记需要显示横幅（用户跳过去写作了）
     setTimeout(function() {
-      if (currentWorkflowStep === STEPS.写作) showWireframeBanner('pre-write');
+      if (typeof currentWorkflowStep !== 'undefined' && currentWorkflowStep === STEPS.写作) showWireframeBanner('pre-write');
     }, 500);
   }
 }
@@ -33191,7 +33190,7 @@ window.renderChapterTimeline = function() {
 
 /* ===== 全书大纲多视图 ===== */
 var _currentNovelOutlineView = 'edit';
-var _novelOutlineDict = {};
+window._novelOutlineDict = {};
 window.switchNovelOutlineView = function(view) {
   _currentNovelOutlineView = view;
   var editEl = document.getElementById('novel-outline-editor');
@@ -34624,18 +34623,18 @@ window.removeCharNode = function(i) {
 
 
 /* ===== Volume Navigation ===== */
-var volumesData = [];
+window.volumesData = [];
 
 window.loadVolumesData = async function() {
   try {
     var data = await api('/api/project/volumes');
     if (data && data.ok && data.volumes && data.volumes.length > 0) {
-      volumesData = data.volumes;
+      window.volumesData = data.volumes;
     } else {
-      volumesData = [];
+      window.volumesData = [];
     }
   } catch(e) {
-    volumesData = [];
+    window.volumesData = [];
   }
 }
 
@@ -34876,7 +34875,7 @@ window.renderVolumeOutlineList = function() {
 }
 
 window.selectVolumeForEditing = async function(volIndex) {
-  _currentVolumeEditIndex = volIndex;
+  window._currentVolumeEditIndex = volIndex;
   var panel = document.getElementById('vol-detail-panel');
   var empty = document.getElementById('vol-detail-empty');
   var form = document.getElementById('vol-detail-form');
@@ -35074,7 +35073,7 @@ window.doDeleteVolumeInline = async function(volIndex) {
     if (data.ok) {
       notify('✅ 卷已删除');
       await loadVolumesData();
-      _currentVolumeEditIndex = -1;
+      window._currentVolumeEditIndex = -1;
       var editor = document.getElementById('vol-detail-editor');
       var empty = document.getElementById('vol-detail-empty');
       if (editor) editor.style.display = 'none';
@@ -35188,7 +35187,7 @@ window.aiGenerateVolumes = async function() {
       if (d.volumes.length > 0) {
         selectVolumeForEditing(0);
       } else {
-        _currentVolumeEditIndex = -1;
+        window._currentVolumeEditIndex = -1;
       }
     } else {
       notify('❌ AI分卷失败: ' + (d.error || '未知错误'));
@@ -35993,13 +35992,13 @@ window.renderOutlineEditor = function() {
 };
 
 /* ===== Canvas Brainstorm ===== */
-var _bsCards = [];
+window._bsCards = [];
 var _bsCardIdCounter = 0;
 var _bsGraphView = false;
-var _bsNodePositions = {}; // {cardId: {x, y}}
-var _bsEdges = []; // [{src: cardId, dst: cardId}]
-var _bsConnectMode = false;
-var _bsConnectSource = null;
+window._bsNodePositions = {}; // {cardId: {x, y}}
+window._bsEdges = []; // [{src: cardId, dst: cardId}]
+window._bsConnectMode = false;
+window._bsConnectSource = null;
 
 window.toggleBsView = function() {
   _bsGraphView = !_bsGraphView;
@@ -36764,13 +36763,13 @@ window.goToStep = async function(step) {
         try {
           var nloData = await api('/api/project/novel-outline');
           if (nloData.ok && nloData.novel_outline) {
-            _novelOutlineDict = nloData.novel_outline;
+            window._novelOutlineDict = nloData.novel_outline;
           }
         } catch(e) {}
       }
       await loadVolumesData();
       renderVolumeOutlineList();
-      _currentVolumeEditIndex = -1;
+      window._currentVolumeEditIndex = -1;
       // 显示空状态提示
       var volEmpty = document.getElementById('vol-detail-empty');
       var volForm = document.getElementById('vol-detail-form');
@@ -37129,7 +37128,7 @@ window.saveChapterBlueprint = function(idx) {
 
 // ══ 人物档案系统 ══
 var characters = []; // 人物列表
-var _selectedCharIdx = -1; // 当前在中间面板选中的人物索引
+window._selectedCharIdx = -1; // 当前在中间面板选中的人物索引
 
 window.renderCharacterList = function() {
   var listEl = document.getElementById('character-list');
@@ -37423,7 +37422,7 @@ window.saveCharacters = function() {
 
 window.loadCharacters = function() {
   return getSettings().then(function(data) {
-    characters = (data && data.characters) || [];
+    window.characters = (data && data.characters) || [];
     // 将 goals 数组反填到 goal 字段供 textarea 显示
     characters.forEach(function(ch) {
       if (ch.goals && ch.goals.length && !ch.goal) {
@@ -37433,7 +37432,7 @@ window.loadCharacters = function() {
         }).join('\n');
       }
     });
-  }).catch(function() { characters = []; });
+  }).catch(function() { window.characters = []; });
 }
 window.advanceHook = function(id){api('/api/project/hooks/advance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,chapter_index:(typeof currentChapterIndex!=="undefined"?currentChapterIndex:0)})}).then(function(d){if(d.ok)loadHooksPanel()});}
 window.recoverHook = function(id){api('/api/project/hooks/recover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,chapter_index:(typeof currentChapterIndex!=="undefined"?currentChapterIndex:0)})}).then(function(d){if(d.ok)loadHooksPanel()});}
@@ -37442,7 +37441,7 @@ window.abandonHook = function(id){if(!confirm('确认放弃此伏笔？'))return
 // 全书优化诊断
 
 /* ===== Plugin Framework ===== */
-var _plugins = [];
+window._plugins = [];
 var _pluginBarVisible = false;
 
 window.registerPlugin = function(id, name, icon, callback) {
@@ -37459,8 +37458,8 @@ window.togglePluginBar = function() {
 window._fetchAndRenderGraph = async function() {
   try {
     var r = await api('/api/engine/graph');
-    _graphNodes = (r && r.nodes) || [];
-    _graphEdges = (r && r.edges) || [];
+    window._graphNodes = (r && r.nodes) || [];
+    window._graphEdges = (r && r.edges) || [];
     if (_graphNodes.length === 0) {
       var container = document.getElementById('graph-svg-container');
       if (container) container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:14px">暂无角色关系数据<br><span style="font-size:12px">请先创建角色档案</span></div>';
